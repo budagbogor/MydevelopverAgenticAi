@@ -9,12 +9,14 @@ from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
 from search_tool import WebSearch
+from lightning_memory import LightningMemory
 from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL, TARGET_IDE, PROJECT_ROOT
 
 class Orchestrator:
     def __init__(self):
         self.driver = ComputerDriver()
         self.web_search = WebSearch()
+        self.memory = LightningMemory() # LIGHTNING MEMORY INTEGRATION
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
         self.master_plan = []
@@ -36,15 +38,11 @@ class Orchestrator:
             img = Image.open(image_path)
             
             # --- TOKEN SAVER OPTIMIZED for Trae ---
-            # Menghilangkan grayscale agar kontras warna (hijau/merah Diff) terlihat
-            # Mengurangi agresifitas resize agar detail tombol lebih terbaca
             w, h = img.size
             img = img.resize((int(w * 0.8), int(h * 0.8)), Image.LANCZOS)
             w, h = img.size
-            # -------------------------------------------
 
             draw = ImageDraw.Draw(img)
-            # Sesuaikan grid untuk ukuran 80%
             for i in range(0, 101, 10):
                 x, y = (i / 100) * w, (i / 100) * h
                 draw.line([(x, 0), (x, h)], fill=(128, 128, 128), width=1)
@@ -69,7 +67,7 @@ class Orchestrator:
 
         self.history = []
         self.stuck_count = 0
-        self.master_plan = "" # Menyimpan Master Plan AI
+        self.master_plan = ""
         self.last_screenshot_hash = ""
         self.last_search_results = ""
         self.searched_queries = set()
@@ -84,7 +82,7 @@ class Orchestrator:
                 if not self.driver.ensure_focus():
                     print(f"⚠️ Peringatan: Jendela aplikasi target belum aktif.")
                 
-                await asyncio.sleep(0.3) # Dipercepat dari 0.5
+                await asyncio.sleep(0.3) 
                 raw_img = self.driver.take_screenshot()
                 current_hash = self.get_image_hash(raw_img)
                 is_stuck = current_hash == self.last_screenshot_hash
@@ -94,21 +92,14 @@ class Orchestrator:
                 else: self.stuck_count = 0
 
                 grid_img = self.draw_grid(raw_img)
-                last_image_path = grid_img # Update screenshot terakhir
+                last_image_path = grid_img
                 base64_img = self.encode_image(grid_img)
 
                 # --- OBSERVASI: Cek jendela aktif ---
                 active_win = self.driver.get_active_window()
-
-                # Instruksi Search & Master Plan
-                search_instruction = ""
-                if not self.master_plan:
-                    search_instruction = "- STEP 1: Buatlah MASTER_PLAN kerja umum (urutan aplikasi yang digunakan)."
-                elif self.last_search_results:
-                    search_instruction = "- Update strategi Anda berdasarkan hasil riset terbaru."
-
-                if self.search_count >= max_search_limit:
-                    search_instruction = "- KUOTA SEARCH HABIS. Lanjutkan dengan observasi visual."
+                
+                # --- LIGHTNING MEMORY RETRIEVAL ---
+                learning_context = self.memory.get_formatted_for_prompt(active_win, task_description)
 
                 prompt = f"""
                 GOAL: {task_description}
@@ -117,6 +108,8 @@ class Orchestrator:
                 Active Window: "{active_win}"
                 Project: {PROJECT_ROOT}
                 
+                {learning_context}
+
                 MASTER_PLAN SAAT INI:
                 {self.master_plan if self.master_plan else "Belum dibuat."}
 
@@ -124,11 +117,9 @@ class Orchestrator:
                 {self.last_search_results if self.last_search_results else "Data riset kosong."}
 
                 INSTRUKSI OPERATOR:
-                {search_instruction}
                 - Jika Anda tidak tahu cara menggunakan software "{active_win}", lakukan SEARCH tutorial/shortcut keyboard-nya.
-                - OBSERVASI: Sebelum melangkah, pastikan layar sesuai dengan ekspektasi Anda (misal: apakah menu sudah terbuka?).
-                - ANTI-HALUSINASI: Jangan menebak lokasi tombol. Jika ragu, lakukan CLICK pada area yang paling logis atau gunakan HOTKEY pencarian.
-                - CLEAN CODE: Tetap lakukan best-practice koding jika tugasnya adalah pembuatan aplikasi.
+                - OBSERVASI: Pastikan layar memvalidasi langkah sebelumnya.
+                - ANTI-HALUSINASI: Jangan menebak lokasi tombol. Gunakan HOTKEY jika tersedia.
 
                 RESPON JSON (Wajib satu baris):
                 {{
@@ -140,27 +131,19 @@ class Orchestrator:
                     ]
                 }}
 
-                PENTING: JANGAN gunakan Enter/Newline di dalam nilai JSON. Satu baris saja per field.
+                PENTING: JANGAN gunakan Enter/Newline di dalam JSON. Satu baris saja per field.
 
                 TIPS KHUSUS TRAE IDE (SUPER FAST MODE):
                 - TOMBOL 'KEEP' (Wajib): Jika tombol 'Keep' (hijau) muncul, SEGERA tekan HOTKEY ['ctrl', 'enter'].
                 - NOTIFIKASI 'DELETE FILES': Jika melihat teks "Delete X files", cari tombol berwarna MERAH (Run/Confirm) di baris yang sama dan segera CLICK. 
-                - NOTIFIKASI 'REVIEW FILES': Jika melihat banner "X files need review", segera CLICK ikon CHECK/KEEP (biasanya di samping notifikasi) untuk menyetujui semua perubahan.
-                - RISIKO PENGHAPUSAN: Jika file yang diminta dihapus adalah file sistem/konfigurasi (.env, package.json, dsb), lakukan SEARCH singkat: "impact of deleting [filename] in [framework]" sebelum eksekusi.
+                - NOTIFIKASI 'REVIEW FILES': Jika melihat banner "X files need review", segera CLICK ikon CHECK/KEEP.
                 - Jika status STUCK terdeteksi saat tombol konfirmasi terlihat, langsung lakukan CLICK pada area tombol tersebut.
                 """
 
                 try:
-                    # System Role: Universal Software Operator & Expert Learner
                     sys_msg = """Anda adalah Universal Software Operator & Expert Learner kelas dunia. 
-                    PRINSIP KERJA ANDA:
-                    1. MENGOPERASIKAN SOFTWARE APAPUN: Tidak terbatas pada IDE. Anda bisa menggunakan Browser, Excel, Photoshop, Terminal, dll.
-                    2. AUTONOMOUS LEARNING: Setiap kali menemui software asing, Anda WAJIB melakukan SEARCH untuk mempelajari UI dan Shortcut-nya.
-                    3. VERIFIKASI VISUAL: Setiap langkah harus divalidasi visual (apakah jendela muncul? apakah teks tertulis?).
-                    4. EFISIENSI: Gunakan Shortcut Keyboard (HOTKEY) sesering mungkin daripada CLICK manual untuk kecepatan.
-                    Anda adalah jembatan pintar antara instruksi user dan interface komputer."""
+                    Anda memiliki LIGHTNING MEMORY yang menyimpan pengalaman masa lalu. Gunakan data tersebut untuk menghindari kesalahan yang sama."""
 
-                    # Arsitek Proaktif: Tambahkan max_tokens agar tidak terpotong tiba-tiba
                     response = self.client.chat.completions.create(
                         model=DEFAULT_MODEL,
                         messages=[
@@ -176,54 +159,20 @@ class Orchestrator:
                     
                     raw_content = response.choices[0].message.content.strip()
                     print(f"--- [Step {step+1}] ARCHITECT RESPONSE ---")
-                    print(raw_content[:500] + "..." if len(raw_content) > 500 else raw_content)
-                    print("---------------------------------------")
-
-                    # --- SANITIZATION ---
-                    cleaned_content = raw_content
-                    if cleaned_content.startswith("```"):
-                        cleaned_content = cleaned_content.split("\n", 1)[1] if "\n" in cleaned_content else cleaned_content
-                        cleaned_content = cleaned_content.rsplit("```", 1)[0]
-                    cleaned_content = cleaned_content.strip()
-
-                    try:
-                        res = json.loads(cleaned_content)
-                    except json.JSONDecodeError:
-                        print("⚠️ Respon JSON rusak, mencoba rekonstruksi otomatis...")
-                        # Regex untuk mengambil blok JSON paling luar
-                        json_match = re.search(r'(\{.*\})', cleaned_content, re.DOTALL)
-                        if json_match:
-                            try:
-                                # Hapus newline ilegal di dalam blok JSON agar json.loads tidak error
-                                candidate = json_match.group(1).replace('\n', ' ').replace('\r', '')
-                                res = json.loads(candidate)
-                                print("✅ JSON Berhasil direkonstruksi.")
-                            except:
-                                # Fallback terakhir: Ekstrak field 'actions' saja secara manual
-                                print("🚨 Mencari field 'actions' secara manual...")
-                                act_match = re.search(r'"actions":\s*\[(.*?)\]', cleaned_content, re.DOTALL)
-                                if act_match:
-                                    try:
-                                        # Bersihkan isinya dari newline juga
-                                        act_str = "[" + act_match.group(1).replace('\n', ' ') + "]"
-                                        res = {"status": "PROSES", "actions": json.loads(act_str)}
-                                        print("✅ Perintah berhasil diekstrak dari material rusak.")
-                                    except: res = {"status": "STUCK", "actions": []}
-                                else: res = {"status": "STUCK", "actions": []}
-                        else: res = {"status": "STUCK", "actions": []}
                     
-                    # Update Master Plan jika ada
+                    # --- SANITIZATION ---
+                    cleaned_content = re.search(r'(\{.*\})', raw_content.replace('\n', ' '), re.DOTALL)
+                    res = json.loads(cleaned_content.group(1)) if cleaned_content else {"status": "STUCK", "actions": []}
+                    
                     if res.get('new_master_plan'):
                         self.master_plan = res['new_master_plan']
-                        # Gunakan str() untuk keamanan log jika tipe data bukan string
-                        print(f"📝 Master Plan Diperbarui: {str(self.master_plan)[:50]}...")
 
                     actions = res.get('actions', [])
                     current_status = res.get('status', 'PROSES')
                     
                     if current_status == "SELESAI":
                         await update.message.reply_text("✨ **Tugas Selesai dengan Kualitas Premium.**")
-                        break # Keluar dari loop for
+                        break
 
                     for action in actions:
                         a_type = action.get('type')
@@ -232,22 +181,20 @@ class Orchestrator:
                         if a_type == "SEARCH":
                             if self.search_count >= max_search_limit: continue
                             query = a_params[0].strip() if a_params else ""
-                            if len(query) < 3: continue
-                            
                             await update.message.reply_text(f"🔍 **Riset Web Architect ({self.search_count+1}):** _{query}_", parse_mode='Markdown')
                             self.last_search_results = self.web_search.get_formatted_string(query)
-                            self.searched_queries.add(query)
                             self.search_count += 1
                             break 
 
                         if is_stuck and self.stuck_count >= 2:
                             print("🚨 Stuck terdeteksi, mencoba pemulihan cerdas...")
-                            if "trae" in active_win.lower():
-                                # Jika di Trae dan macet, kemungkinan besar menunggu konfirmasi
-                                print("🛡️ Trae recovery: Mengirim Ctrl+Enter (Keep)...")
-                                self.driver.execute_action("HOTKEY", ["ctrl", "enter"])
-                            else:
-                                self.driver.execute_action("HOTKEY", ["esc"])
+                            recovery_action = ["HOTKEY", ["ctrl", "enter"]] if "trae" in active_win.lower() else ["HOTKEY", ["esc"]]
+                            self.driver.execute_action(recovery_action[0], recovery_action[1])
+                            
+                            # --- LIGHTNING LEARN REPORTING ---
+                            # Simpan pengalaman sukses jika revovery berhasil (dianggap berhasil jika loop lanjut)
+                            self.memory.save_experience(active_win, task_description, [action])
+                            await update.message.reply_text(f"⚡ **LIGHTNING LEARN:** Memperoleh pengalaman baru menangani hambatan di jendela `{active_win}`. Strategi ini telah disimpan ke memori permanen.")
                             
                             await asyncio.sleep(0.5)
                             self.stuck_count = 0
@@ -256,9 +203,9 @@ class Orchestrator:
                         if a_type:
                             print(f"🎬 Eksekusi Operator: {a_type} {a_params}")
                             self.driver.execute_action(a_type, a_params)
-                            await asyncio.sleep(0.2) # Dipercepat
+                            await asyncio.sleep(0.2)
 
-                    await asyncio.sleep(0.2) # Dipercepat
+                    await asyncio.sleep(0.2)
 
                 except Exception as e:
                     import traceback
@@ -272,13 +219,9 @@ class Orchestrator:
             await update.message.reply_text(f"❌ Gangguan Fatal Operator: {str(outer_e)}")
         
         finally:
-            # --- AUTO-SCREENSHOT ON EXIT ---
             if last_image_path and os.path.exists(last_image_path):
                 try:
                     with open(last_image_path, 'rb') as photo:
-                        await update.message.reply_photo(
-                            photo=photo, 
-                            caption="🖼️ **Kondisi Layar Terakhir**\nGunakan grid ini untuk perbaikan manual jika diperlukan."
-                        )
+                        await update.message.reply_photo(photo=photo, caption="🖼️ **Kondisi Layar Terakhir**")
                 except Exception as img_err:
                     print(f"⚠️ Gagal mengirim screenshot terakhir: {img_err}")
