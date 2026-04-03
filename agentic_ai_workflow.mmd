@@ -1,0 +1,15 @@
+graph TD
+    A[Pengguna: Kirim Permintaan via Telegram] --> B{Orchestrator: Terima & Analisis Permintaan};
+    B --> C{Orchestrator: Buat Rencana Eksekusi};
+    C --> D[Computer Driver: Buka IDE AI];
+    D --> E{VLM: Analisis IDE & Orchestrator: Ketik Prompt};
+    E --> F{IDE AI: Hasilkan/Modifikasi Kode};
+    F --> G{VLM: Monitor Progres & Computer Driver: Ambil Screenshot};
+    G -- Jika Error/Perlu Input --> E;
+    G -- Jika Kode Selesai --> H{Computer Driver: Jalankan Pengujian};
+    H -- Jika Tes Gagal --> E;
+    H -- Jika Tes Berhasil --> I{Deployment: Buat Repo GitHub};
+    I --> J{Deployment: Push Kode ke GitHub};
+    J --> K{Deployment: Deploy ke Vercel};
+    K --> L[Orchestrator: Kirim Link GitHub & Vercel ke Telegram];
+    L --> M[Pengguna: Terima Hasil Akhir];

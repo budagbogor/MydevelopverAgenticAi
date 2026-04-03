@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Project Specific
+screenshots/
+*.png
+*.jpg
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
