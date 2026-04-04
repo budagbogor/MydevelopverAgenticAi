@@ -11,8 +11,8 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini/gemini-2.5-flash")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Keamanan Whitelist
-raw_whitelist = os.getenv("ALLOWED_TELEGRAM_USER_IDS", "")
-ALLOWED_TELEGRAM_WHITELIST = [u.strip() for u in raw_whitelist.split(",") if u.strip()]
+ALLOWED_TELEGRAM_USER_IDS = os.getenv("ALLOWED_TELEGRAM_USER_IDS", "")
+ALLOWED_TELEGRAM_WHITELIST = [u.strip() for u in ALLOWED_TELEGRAM_USER_IDS.split(",") if u.strip()]
 
 # Konfigurasi IDE
 TARGET_IDE = os.getenv("TARGET_IDE", "Trae")
@@ -20,6 +20,7 @@ IDE_PATH = os.getenv("IDE_PATH", r"C:\Users\DarkSky\AppData\Local\Programs\Trae\
 
 # Lokasi folder proyek
 PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.getcwd())
+BASE_DIR = os.getenv("BASE_DIR", r"I:\projectWebApps2026")
 
 # Token Deployment
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")

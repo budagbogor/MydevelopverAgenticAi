@@ -1,0 +1,19 @@
+{
+    "category": "Business, Payments & SEO",
+    "description": "Integration of revenue-generating features, search engine optimization, and advanced analytics for business success.",
+    "keywords": ["payment", "stripe", "checkout", "subscription", "seo", "analytics", "marketing", "ads", "revenue"],
+    "best_practices": [
+        "Include proper, descriptive title tags and meta descriptions for SEO.",
+        "Implement Stripe Checkout or LemonSqueezy for secure payments and subscriptions.",
+        "Use a single <h1> per page with proper heading hierarchy (h1 -> h2 -> h3).",
+        "Enable SEO-friendly dynamic routing and canonical URLs.",
+        "Integrate PostHog or Google Analytics for advanced event tracking.",
+        "Optimize Core Web Vitals for search engine ranking (LCP, FID, CLS).",
+        "Add OG tags for rich social media sharing in OpenGraph metadata."
+    ],
+    "tech_stack": ["Stripe", "LemonSqueezy", "PostHog", "Google Analytics", "Vercel Analytics", "SEO Engine"],
+    "business_rules": {
+        "stripe_secret": "Never leak secret keys; use environment variables.",
+        "seo_integrity": "Always validate sitemaps and robots.txt."
+    }
+}

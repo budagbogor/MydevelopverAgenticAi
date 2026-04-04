@@ -18,10 +18,12 @@ if %errorlevel% neq 0 (
 echo [1/2] Memeriksa dependensi...
 pip install -r requirements.txt --quiet
 
-:: Jalankan main.py
-echo [2/2] Memulai Bot...
+:: Jalankan main.py dengan mode CLI (Langsung Aktif)
+echo [2/2] Memulai Bot dalam mode CLI...
 echo.
-python main.py
+echo [SAFE START] Membersihkan sesi bot lama...
+if exist bot.lock del /f /q bot.lock
+python main.py --cli
 echo.
 echo [INFO] Bot telah berhenti.
 pause

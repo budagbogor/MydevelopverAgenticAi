@@ -1,0 +1,19 @@
+{
+    "category": "Backend & Database Architect",
+    "description": "Scalable backend systems, secure authentication, and optimized data access with Postgres and App Router.",
+    "keywords": ["backend", "database", "api", "auth", "postgres", "sql", "login", "server", "security", "node"],
+    "best_practices": [
+        "Use Next.js 15+ App Router and React Server Components for seamless data fetching.",
+        "Implement Row Level Security (RLS) on all database tables (PostgreSQL/Supabase).",
+        "Enable passwordless and OAuth authentication through Better Auth or Clerk.",
+        "Optimize SQL queries and indexing to minimize latency; use Prisma or Drizzle ORM.",
+        "Secure APIs with proper middleware, rate limiting, and input sanitization.",
+        "Model data for scalability and relational integrity.",
+        "Implement real-time features using WebSockets or Supabase Realtime."
+    ],
+    "tech_stack": ["Next.js App Router", "Better Auth", "Clerk", "PostgreSQL", "Neon", "Supabase", "Prisma", "DrizzleORM", "Zod"],
+    "security_rules": {
+        "rls_enabled": "Always enable RLS for production data.",
+        "input_validation": "Use Zod for rigorous input validation on both client and server."
+    }
+}

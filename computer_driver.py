@@ -16,13 +16,26 @@ class ComputerDriver:
         """Mematikan proses IDE secara paksa untuk restart bersih."""
         try:
             import subprocess
-            print(f"🛑 Mematikan {TARGET_IDE}...")
-            subprocess.run(["taskkill", "/F", "/IM", os.path.basename(IDE_PATH)], capture_output=True)
-            time.sleep(1.0)
+            exe_name = os.path.basename(IDE_PATH)
+            print(f"🛑 Mematikan {TARGET_IDE} ({exe_name})...")
+            # Gunakan taskkill dengan /F (force) dan /T (tree) untuk mematikan semua sub-proses
+            subprocess.run(["taskkill", "/F", "/T", "/IM", exe_name], capture_output=True)
+            time.sleep(2.0) # Tunggu cleanup
+            # Pastikan bot.lock dibersihkan jika bot berjalan di dalam IDE
+            if os.path.exists("bot.lock"): os.remove("bot.lock")
             return True
         except Exception as e:
             print(f"⚠️ Gagal mematikan IDE: {e}")
             return False
+
+    def close_all_tabs(self):
+        """Menutup semua tab editor di Trae/VSCode menggunakan hotkey Ctrl+K W."""
+        print("🧼 Membersihkan tab editor (Clean Slate)...")
+        self.ensure_focus() # Pastikan terfokus sebelum menekan hotkey
+        pyautogui.hotkey('ctrl', 'k')
+        time.sleep(0.2)
+        pyautogui.press('w')
+        time.sleep(1.0)
 
     def get_active_window(self):
         """Mendapatkan judul jendela yang sedang aktif."""
@@ -43,7 +56,16 @@ class ComputerDriver:
             all_windows = gw.getAllWindows()
             target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
             
-            if target_windows:
+            # --- SYNC VALIDATION (PROYEK BENAR?) ---
+            project_base = os.path.basename(PROJECT_ROOT)
+            if target_windows and target == TARGET_IDE:
+                win = target_windows[0]
+                # Jika nama proyek tidak ada di judul jendela, paksa restart
+                if project_base.lower() not in win.title.lower():
+                    print(f"🔄 Judul Jendela Salah ('{win.title}'). Meminta restart untuk folder '{project_base}'...")
+                    force_restart = True
+            
+            if target_windows and not force_restart:
                 win = target_windows[0]
                 try:
                     if win.isMinimized: win.restore()
@@ -52,10 +74,13 @@ class ComputerDriver:
                     return True
                 except: pass
             
-            # 2. Jika ini IDE dan belum terbuka, coba jalankan
-            if target == TARGET_IDE and os.path.exists(IDE_PATH):
-                print(f"🚀 Menjalankan {target}...")
-                subprocess.Popen([IDE_PATH, PROJECT_ROOT], shell=True)
+            # 2. Jika IDE belum terbuka atau butuh restart
+            if target == TARGET_IDE and (not target_windows or force_restart):
+                if force_restart: self.close_ide()
+                print(f"🚀 Menjalankan {target} pada folder: {PROJECT_ROOT}...")
+                # Gunakan format string tunggal dengan tanda kutip untuk shell=True di Windows
+                cmd = f'"{IDE_PATH}" "{PROJECT_ROOT}"'
+                subprocess.Popen(cmd, shell=True)
                 for _ in range(15):
                     time.sleep(1)
                     if [w for w in gw.getAllWindows() if target.lower() in w.title.lower()]:

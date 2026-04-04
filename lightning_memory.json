@@ -1,0 +1,39 @@
+{
+    "\u25cf style.css - testagenticai - trae | buat landing page toko buku": {
+        "window": "\u25cf style.css - testAgenticAi - Trae",
+        "task": "buat landing page toko buku",
+        "successful_actions": [
+            "{\"type\": \"CLICK\", \"params\": [\"CHECK/KEEP icon for '3 files need review' notification\"]}",
+            "{\"type\": \"CLICK\", \"params\": [\"index.html\"]}"
+        ],
+        "failed_actions": [],
+        "count": 9
+    },
+    "\u25cf style.css - testagenticai - trae | lanjutkan": {
+        "window": "\u25cf style.css - testAgenticAi - Trae",
+        "task": "lanjutkan",
+        "successful_actions": [
+            "{\"type\": \"CLICK\", \"params\": [\"CHECK/KEEP icon for '3 files need review' notification\"]}"
+        ],
+        "failed_actions": [],
+        "count": 1
+    },
+    " | buat web aplikasi toko sparepart motor": {
+        "window": "",
+        "task": "Buat web aplikasi toko sparepart motor",
+        "successful_actions": [
+            "{\"type\": \"CLICK\", \"params\": [\"Explorer\"]}"
+        ],
+        "failed_actions": [],
+        "count": 1
+    },
+    "testerbang - trae | buat web aplikasi toko sparepart motor": {
+        "window": "testerbang - Trae",
+        "task": "Buat web aplikasi toko sparepart motor",
+        "successful_actions": [
+            "{\"type\": \"CLICK\", \"params\": [\"Folder\"]}"
+        ],
+        "failed_actions": [],
+        "count": 2
+    }
+}

@@ -13,13 +13,13 @@ from config import (
 from utils import set_autostart, is_autostart_enabled
 from telegram_bot import TelegramBot
 
-# Konfigurasi Tema Dark Sleek
-DARK_BG = "#0b0f19"
+# Konfigurasi Tema yang Lebih Aman untuk Versi Flet Anda
+DARK_BG = "black"
 DARK_NAV = "#111827"
-ACCENT_BLUE = "#3b82f6"
-ACCENT_PURPLE = "#8b5cf6"
-TEXT_PRIMARY = "#f9fafb"
-TEXT_SECONDARY = "#9ca3af"
+ACCENT_BLUE = ft.Colors.BLUE
+ACCENT_PURPLE = ft.Colors.PURPLE
+TEXT_PRIMARY = ft.Colors.WHITE
+TEXT_SECONDARY = ft.Colors.GREY_400
 
 class LogHandler(logging.Handler):
     def __init__(self, log_view, page):
@@ -28,9 +28,13 @@ class LogHandler(logging.Handler):
         self.page = page
 
     def emit(self, record):
-        msg = self.format(record)
-        self.log_view.controls.append(ft.Text(msg, color=TEXT_PRIMARY, size=12))
-        self.page.update()
+        try:
+            msg = self.format(record)
+            self.log_view.controls.append(ft.Text(msg, color=TEXT_PRIMARY, size=12))
+            self.page.update()
+        except:
+            # Sesi GUI hancur atau ditutup, abaikan update log visual
+            pass
 
 class DarkSkyApp:
     def __init__(self, page: ft.Page):
@@ -39,8 +43,9 @@ class DarkSkyApp:
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor = DARK_BG
         self.page.padding = 0
-        self.page.window.width = 1100
-        self.page.window.height = 750
+        self.page.window_width = 1100
+        self.page.window_height = 750
+        self.page.update()
         
         self.bot_thread = None
         self.is_running = False
@@ -57,8 +62,14 @@ class DarkSkyApp:
         self.vercel_token_input = ft.TextField(label="Vercel Token", value=VERCEL_TOKEN or "", password=True, can_reveal_password=True, expand=True)
         self.autostart_switch = ft.Switch(label="Start on Windows Boot", value=is_autostart_enabled(), active_color=ACCENT_BLUE)
         
-        self.setup_ui()
-        self.setup_logging()
+        print("🔧 Initializing DarkSkyApp UI...")
+        try:
+            self.setup_ui()
+            self.setup_logging()
+            self.page.update()
+            print("✅ UI Setup Complete.")
+        except Exception as e:
+            print(f"❌ Error during UI Setup: {e}")
 
     def setup_logging(self):
         handler = LogHandler(self.log_view, self.page)
@@ -75,9 +86,9 @@ class DarkSkyApp:
             min_width=100,
             bgcolor=DARK_NAV,
             destinations=[
-                ft.NavigationRailDestination(icon=ft.icons.DASHBOARD_ROUNDED, label="Dashboard"),
-                ft.NavigationRailDestination(icon=ft.icons.SETTINGS_ROUNDED, label="Settings"),
-                ft.NavigationRailDestination(icon=ft.icons.HELP_OUTLINE_ROUNDED, label="Docs"),
+                ft.NavigationRailDestination(icon="dashboard", label="Dashboard"),
+                ft.NavigationRailDestination(icon="settings", label="Settings"),
+                ft.NavigationRailDestination(icon="help_outline", label="Docs"),
             ],
             on_change=self.on_nav_change,
         )
@@ -86,11 +97,14 @@ class DarkSkyApp:
         self.settings_view = self.create_settings_view()
         self.docs_view = self.create_docs_view()
 
-        self.content = ft.Container(content=self.dashboard_view, expand=True, padding=25)
-        
+        # LAYOUT BERSIH: Tanpa penumpukan container yang berlebihan
         self.page.add(
-            ft.Row([self.rail, ft.VerticalDivider(width=1, color=ft.colors.WHITE12), self.content], expand=True)
+            ft.Row([
+                ft.Container(content=self.rail, bgcolor=DARK_NAV, width=110),
+                ft.Container(content=self.dashboard_view, expand=True, bgcolor="black", padding=20)
+            ], expand=True, spacing=0)
         )
+        self.page.update()
 
     def on_nav_change(self, e):
         idx = e.control.selected_index
@@ -99,33 +113,27 @@ class DarkSkyApp:
         self.page.update()
 
     def create_dashboard_view(self):
-        self.status_icon = ft.Icon(ft.icons.CIRCLE, color=ft.colors.RED_400, size=14)
+        self.status_icon = ft.Icon("circle", color="red", size=14)
         self.status_text = ft.Text("OFFLINE", color=TEXT_SECONDARY, weight=ft.FontWeight.BOLD)
         self.log_view = ft.ListView(expand=True, spacing=5, auto_scroll=True)
         self.start_btn = ft.ElevatedButton(
             "ACTIVATE BOT", 
-            icon=ft.icons.POWER_SETTINGS_NEW_ROUNDED, 
-            bgcolor=ACCENT_BLUE, 
-            color=ft.colors.WHITE,
+            icon="power_settings_new", 
+            bgcolor="blue", 
+            color="white",
             on_click=self.toggle_bot,
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         return ft.Column([
-            ft.Row([
-                ft.Text("DarkSky | Agent Dashboard", size=28, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                ft.Row([self.status_icon, self.status_text], spacing=8)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Text("Real-time monitoring and autonomous agent logs", color=TEXT_SECONDARY),
-            ft.Divider(height=40, color=ft.colors.WHITE12),
-            self.start_btn,
+            self.start_btn, # TOMBOL SEKARANG DI PALING ATAS
+            ft.Text("DarkSky | Agent Dashboard", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+            ft.Row([self.status_icon, self.status_text], spacing=8),
             ft.Container(
                 content=self.log_view,
                 expand=True,
-                bgcolor="#050810",
-                border_radius=12,
-                padding=15,
-                border=ft.border.all(1, ft.colors.WHITE10)
+                bgcolor="black",
+                padding=10,
             )
         ], expand=True)
 
@@ -133,23 +141,23 @@ class DarkSkyApp:
         return ft.Column([
             ft.Text("Configuration Hub", size=28, weight=ft.FontWeight.BOLD, color=ACCENT_PURPLE),
             ft.Text("Manage your tokens and system preferences", color=TEXT_SECONDARY),
-            ft.Divider(height=30, color=ft.colors.WHITE12),
+            ft.Divider(height=30, color=ft.Colors.WHITE12),
             ft.Row([self.token_input, self.user_id_input]),
             ft.Row([self.api_key_input, self.base_url_input]),
             ft.Row([self.model_input, self.ide_input]),
             self.root_path_input,
             ft.Row([self.github_token_input, self.vercel_token_input]),
-            ft.Divider(height=30, color=ft.colors.WHITE12),
+            ft.Divider(height=30, color=ft.Colors.WHITE12),
             ft.Row([
                 self.autostart_switch,
-                ft.ElevatedButton("SAVE CHANGES", icon=ft.icons.SAVE_ROUNDED, bgcolor=ACCENT_PURPLE, color=ft.colors.WHITE, on_click=self.handle_save)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                ft.ElevatedButton("SAVE CHANGES", icon="save", bgcolor=ACCENT_PURPLE, color=ft.Colors.WHITE, on_click=self.handle_save)
+            ])
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def create_docs_view(self):
         return ft.Column([
             ft.Text("Documentation & Guides", size=28, weight=ft.FontWeight.BOLD, color=ACCENT_BLUE),
-            ft.Divider(height=20, color=ft.colors.WHITE12),
+            ft.Divider(height=20, color=ft.Colors.WHITE12),
             ft.Markdown(
                 """
 ### 🔧 Prasyarat Sistem
@@ -192,7 +200,7 @@ Aplikasi ini membutuhkan beberapa software terinstal agar fitur otonom berjalan 
             self.page.snack_bar.open = True
             logging.info("💾 Konfigurasi diperbarui oleh pengguna.")
         else:
-            self.page.snack_bar = ft.SnackBar(ft.Text("Failed to save settings."), bgcolor=ft.colors.RED_ACCENT)
+            self.page.snack_bar = ft.SnackBar(ft.Text("Failed to save settings."), bgcolor=ft.Colors.RED_ACCENT)
             self.page.snack_bar.open = True
         self.page.update()
 
@@ -208,9 +216,9 @@ Aplikasi ini membutuhkan beberapa software terinstal agar fitur otonom berjalan 
             return
 
         self.is_running = True
-        self.status_icon.color = ft.colors.GREEN_400
+        self.status_icon.color = ft.Colors.GREEN_400
         self.status_text.value = "ONLINE"
-        self.status_text.color = ft.colors.GREEN_400
+        self.status_text.color = ft.Colors.GREEN_400
         self.start_btn.text = "BOT IS ACTIVE"
         self.start_btn.disabled = True
         self.page.update()

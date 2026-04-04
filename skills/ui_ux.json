@@ -1,0 +1,19 @@
+{
+    "category": "UI/UX & Frontend Design",
+    "description": "Premium design systems and modern frontend components based on Anthropic, Vercel, and Google Labs standards.",
+    "keywords": ["ui", "ux", "landing", "frontend", "design", "css", "tailwind", "responsive", "shadcn", "component"],
+    "best_practices": [
+        "Use modern typography: Inter, Roboto, or Outfit from Google Fonts.",
+        "Implement vibrant, harmonious color palettes (HSL); avoid plain red/blue/green.",
+        "Design for dark mode by default with elegant glassmorphism effects.",
+        "Use smooth gradients and subtle micro-animations for interactive elements.",
+        "Build with shadcn/ui components for consistency and high performance.",
+        "Prioritize mobile-first responsiveness and high Core Web Vitals.",
+        "Ensure fast page load times through asset optimization (Next.js Image)."
+    ],
+    "tech_stack": ["Next.js", "Tailwind CSS v4", "shadcn/ui", "GSAP", "Framer Motion"],
+    "design_tokens": {
+        "glassmorphism": "bg-white/10 backdrop-blur-md border border-white/20",
+        "shadow_premium": "shadow-[0px_4px_16px_rgba(17,17,26,0.1),_0px_8px_24px_rgba(17,17,26,0.1),_0px_16px_56px_rgba(17,17,26,0.1)]"
+    }
+}
