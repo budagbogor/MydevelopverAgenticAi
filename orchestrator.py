@@ -116,7 +116,7 @@ class Orchestrator:
         
         Pecah menjadi 3-5 Milestone teknis. Setiap Milestone HARUS mencakup:
         1. "name": Judul singkat tahap.
-        2. "instruction": Instruksi sangat detail untuk agen coding (path file, logic, dsb).
+        2. "instruction": Instruksi SANGAT DETAIL untuk diketikkan ke dalam AI Builder/Prompt (misal: "Ketik di Builder: 'Create a responsive Hero section with Tailwind CSS, a catchy headline, and a dark theme in Hero.tsx'"). JANGAN hanya memberikan nama file.
         3. "is_ui_stage": Boolean (True jika ini adalah tahap pembuatan Halaman Produk/UI visual).
 
         FORMAT KELUARAN WAJIB JSON:
@@ -285,7 +285,14 @@ class Orchestrator:
                         # Console Logging
                         print(f"🤖 Agent Action: {a_type}({a_params})")
                         self.driver.execute_action(a_type, a_params)
-                        await asyncio.sleep(0.5) # Beri jeda lebih lama untuk verifikasi
+                        
+                        # --- AUTO-SUBMIT ENTER (Specific for Builder) ---
+                        if a_type == "TYPE":
+                            await asyncio.sleep(0.5)
+                            self.driver.execute_action("ENTER", [])
+                            print("⌨️ Auto-Submit: ENTER sent.")
+                        
+                        await asyncio.sleep(0.8) # Beri jeda lebih lama untuk verifikasi
 
                         # Kirim Screenshot Bukti jika aksi penting
                         if a_type in ["TYPE", "CLICK", "ENTER", "HOTKEY"]:
