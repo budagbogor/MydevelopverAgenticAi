@@ -1,5 +1,7 @@
 @echo off
 title DarkSky Agentic AI Developer - Dashboard
+setlocal enabledelayedexpansion
+
 echo.
 echo  ======================================================
 echo     DARKSKY AGENTIC AI DEVELOPER - GUI LAUNCHER
@@ -14,19 +16,25 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: 2. Proteksi Lock File yang Lebih Ramah (Ghost Lock Handler)
+:: 2. Proteksi Lock File dengan Command CHOICE (Lebih Stabil)
 if exist bot.lock (
     echo [!] ALERT: File bot.lock ditemukan. 
     echo Ini terjadi jika bot ditutup paksa atau crash sebelumnya.
     echo.
-    set /p choice="Hapus kunci sesi lama dan masuk sekarang? (y/n): "
-    if /i "%choice%"=="y" (
-        del /f /q bot.lock
-        echo [OK] Kunci sesi dibersihkan.
-    ) else (
+    echo [y] Hapus kunci sesi lama dan masuk sekarang.
+    echo [n] Batalkan peluncuran.
+    echo.
+    choice /c yn /n /m "Pilihan Anda (y/n): "
+    
+    if errorlevel 2 (
         echo [INFO] Membatalkan peluncuran.
         pause
         exit /b
+    )
+    
+    if errorlevel 1 (
+        del /f /q bot.lock
+        echo [OK] Kunci sesi dibersihkan.
     )
 )
 
