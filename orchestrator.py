@@ -173,7 +173,7 @@ class Orchestrator:
             ms_instruction = ms.get('instruction', '')
             is_ui = ms.get('is_ui_stage', False)
             
-            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}")
+            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n\n📜 **Instruksi:**\n{ms_instruction}")
             
             # --- MIN-Autonomous Loop per Milestone ---
             max_steps = 15 # Fokus pendek per milestone
@@ -262,7 +262,7 @@ class Orchestrator:
                             self.initial_snapshot = current_snapshot
                             break # Lanjut ke Milestone berikutnya
 
-                    # Execute Actions
+                    # Execute Actions (WITH FULL DISCLOSURE)
                     for action in actions:
                         a_type = action.get('type')
                         a_params = action.get('params', [])
@@ -274,10 +274,24 @@ class Orchestrator:
                                 self.search_count += 1
                             continue
 
-                        # Console Logging for Transparency
+                        # Telegram Mirroring
+                        if a_type == "TYPE":
+                            await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{a_params[0]}`")
+                        elif a_type == "CLICK":
+                            await update.message.reply_text(f"🖱️ **Bot Klik di:** `{a_params}`")
+                        elif a_type == "HOTKEY":
+                            await update.message.reply_text(f"🎹 **Bot Hotkey:** `{a_params}`")
+
+                        # Console Logging
                         print(f"🤖 Agent Action: {a_type}({a_params})")
                         self.driver.execute_action(a_type, a_params)
-                        await asyncio.sleep(0.1)
+                        await asyncio.sleep(0.5) # Beri jeda lebih lama untuk verifikasi
+
+                        # Kirim Screenshot Bukti jika aksi penting
+                        if a_type in ["TYPE", "CLICK", "ENTER", "HOTKEY"]:
+                             post_img = self.driver.take_screenshot()
+                             post_grid = self.draw_grid(post_img)
+                             await update.message.reply_photo(photo=open(post_grid, 'rb'), caption=f"📸 **Hasil Aksi: {a_type}**")
 
                 except Exception as e:
                     print(f"⚠️ Error dalam Milestone loop: {e}")
