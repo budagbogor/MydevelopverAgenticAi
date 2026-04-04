@@ -12,6 +12,11 @@ class ComputerDriver:
         self.screenshot_dir = "screenshots"
         if not os.path.exists(self.screenshot_dir):
             os.makedirs(self.screenshot_dir)
+        
+        # --- CALIBRATION: DPI SCALE ---
+        # Jika layar 4K dengan scaling 150%, set DPI_SCALE=1.5 di .env
+        self.dpi_scale = float(os.getenv("DPI_SCALE", "1.0"))
+        print(f"⚙️ Driver diinisialisasi (DPI Scale: {self.dpi_scale})")
     def close_ide(self):
         """Mematikan proses IDE secara paksa untuk restart bersih."""
         try:
@@ -123,10 +128,14 @@ class ComputerDriver:
                     print("🛡️ Proteksi: Membatalkan klik pada area sistem CLOSE.")
                     return
                 
-                target_x = (x_p / 100) * width
-                target_y = (y_p / 100) * height
+                target_x = ((x_p / 100) * width) / self.dpi_scale
+                target_y = ((y_p / 100) * height) / self.dpi_scale
                 
-                pyautogui.moveTo(target_x, target_y, duration=0.3)
+                # Log untuk debugging user
+                print(f"🤖 CLICK at ({int(target_x)}, {int(target_y)}) - Grid [{x_p}%, {y_p}%]")
+                
+                # Pergerakan mouse lambat agar user bisa melihat highlight
+                pyautogui.moveTo(target_x, target_y, duration=0.5)
                 pyautogui.click()
                 
             elif action_type == "TYPE":

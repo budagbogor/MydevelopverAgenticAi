@@ -162,6 +162,7 @@ class Orchestrator:
         self.initial_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
         self.history = []
         self.stuck_count = 0
+        self.last_screenshot_hash = "" # Tambahkan tracking hash
         self.searched_queries = set()
         self.search_count = 0
         max_search_limit = 5
@@ -181,6 +182,23 @@ class Orchestrator:
                 
                 await asyncio.sleep(0.1)
                 raw_img = self.driver.take_screenshot()
+                
+                # --- VISUAL STUCK DETECTION ---
+                current_hash = self.get_image_hash(raw_img)
+                if current_hash == self.last_screenshot_hash:
+                    self.stuck_count += 1
+                else:
+                    self.stuck_count = 0
+                self.last_screenshot_hash = current_hash
+                
+                if self.stuck_count >= 5:
+                    print(f"⚠️ VISUAL STUCK DETECTED di Milestone '{ms_name}'! Mencoba memulihkan fokus...")
+                    self.driver.ensure_focus(force_restart=False)
+                    self.driver.execute_action("HOTKEY", ["esc"])
+                    self.driver.execute_action("CLICK", [50, 50]) # Klik tengah untuk aktivasi
+                    self.stuck_count = 0
+                    await update.message.reply_text(f"⚠️ **Visual Stuck:** Bot mendeteksi layar tidak berubah. Mencoba kalibrasi fokus...")
+                
                 grid_img = self.draw_grid(raw_img)
                 base64_img = self.encode_image(grid_img)
                 active_win = self.driver.get_active_window()
