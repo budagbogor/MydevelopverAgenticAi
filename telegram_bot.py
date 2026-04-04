@@ -11,16 +11,7 @@ from search_tool import WebSearch
 
 class TelegramBot:
     def __init__(self, token=None):
-        self.lock_file = "bot.lock"
         self.is_processing = False # ANTI-CONCURRENCY LOCK
-        if os.path.exists(self.lock_file):
-            print("\n⚠️ PERINGATAN: Bot sudah berjalan di jendela lain!")
-            print("Harap tutup bot lama sebelum membuka yang baru.")
-            sys.exit(1)
-        
-        with open(self.lock_file, "w") as f:
-            f.write(str(os.getpid()))
-
         self.orchestrator = Orchestrator()
         self.web_search = WebSearch()
         bot_token = token if token else TELEGRAM_BOT_TOKEN
@@ -115,7 +106,7 @@ class TelegramBot:
                 self.orchestrator.driver.ensure_focus(force_restart=True)
                 # Bersihkan tab lama (Clean Slate) hanya jika proyek benar-benar baru
                 if is_new: self.orchestrator.driver.close_all_tabs()
-                # Tunggu sebentar agar IDE benar-benar terbuka sebelum menerima tugas baru
+                # Tunggu sebentar agar IDE benar- benar terbuka sebelum menerima tugas baru
                 await asyncio.sleep(5)
             else:
                 await update.message.reply_text("❌ Gagal update .env")
@@ -207,10 +198,3 @@ class TelegramBot:
                 retry_delay = min(retry_delay * 2, 60)
                 print(f"🔄 Mencoba menyambung kembali dalam {retry_delay} detik...")
                 continue
-            finally:
-                # Membersihkan file kunci saat bot benar-benar berhenti
-                if hasattr(self, 'lock_file') and os.path.exists(self.lock_file):
-                    try:
-                        os.remove(self.lock_file)
-                    except:
-                        pass
