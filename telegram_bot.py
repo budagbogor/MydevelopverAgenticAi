@@ -157,15 +157,22 @@ class TelegramBot:
         if self.is_processing:
             return await update.message.reply_text("⏳ **Bot Sedang Sibuk:** Harap tunggu hingga tugas sebelumnya selesai atau ketik /stop.")
 
-        text = update.message.text
-        # --- AUTO-PROJECT DETECTION ---
-        if text.lower().startswith("buat web aplikasi") or text.lower().startswith("buatkan web aplikasi"):
-            potential_name = text.split("aplikasi ", 1)[-1].split("\n")[0].strip()
+        text = update.message.text.lower()
+        # --- AUTO-PROJECT DETECTION (More Robust) ---
+        new_project_keywords = ["buat aplikasi", "buatkan aplikasi", "bikin aplikasi", "bikin app", "create app", "new project"]
+        
+        if any(text.startswith(kw) for kw in new_project_keywords):
+            # Ambil sisa teks setelah keyword sebagai nama folder
+            for kw in new_project_keywords:
+                if text.startswith(kw):
+                    potential_name = text.split(kw, 1)[-1].split("\n")[0].strip()
+                    break
+            
             folder_name = "".join([c if c.isalnum() else "-" for c in potential_name[:30]]).lower().strip("-")
             
             current_project = os.path.basename(PROJECT_ROOT)
             if folder_name and folder_name != current_project:
-                await update.message.reply_text(f"🎨 **Intent Proyek Baru Terdeteksi:** {folder_name}")
+                await update.message.reply_text(f"🎨 **Intent Proyek Baru Terdeteksi:** `{folder_name}`", parse_mode='Markdown')
                 context.args = [folder_name]
                 await self.handle_new_project(update, context)
 

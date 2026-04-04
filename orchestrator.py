@@ -85,51 +85,165 @@ class Orchestrator:
         return ""
 
     async def enhance_prompt(self, brief_task):
-        """Mengubah input singkat menjadi instruksi teknis yang detail & luar biasa."""
-        print(f"🧠 [BRAINSTORMING] Memperluas prompt: {brief_task}")
+        """Mengubah input singkat menjadi daftar Milestone teknis yang terstruktur (JSON)."""
+        print(f"🧠 [BRAINSTORMING] Memperluas prompt ke Milestones: {brief_task}")
         
-        # SUNTIKKAN SKILL RELEVAN
         relevant_skills = self._get_relevant_skills(brief_task)
         
         enhancer_prompt = f"""
-        Tugas Anda adalah sebagai Senior Software Architect & Prompt Engineer.
-        Ubah instruksi singkat pengguna ini menjadi instruksi pembangunan software yang sangat detail, modern, dan lengkap.
+        Tugas Anda adalah sebagai Lead Software Architect.
+        Ubah instruksi singkat pengguna berikut menjadi Rencana Pembangunan bertahap (Milestones).
         
         {relevant_skills}
 
-        INSTRUKSI SINGKAT PENGGUNA: "{brief_task}"
+        INSTRUKSI PENGGUNA: "{brief_task}"
         
-        Keluaran harus mencakup:
-        1. Fitur Utama yang harus ada (Minimalis namun fungsional, best practice modern).
-        2. Gaya Desain (Sesuai INJECTED SKILLS di atas jika ada, UI modern, premium, interaktif).
-        3. Detail teknis spesifik untuk agen pengembang (Arsitektur folder, komponen, alur data).
-        
-        Format keluaran: Teks instruksi teknis yang padat, berwibawa, dan profesional dalam Bahasa Indonesia.
-        JANGAN tambahkan basa-basi, langsung ke instruksi pembangunan.
+        Pecah menjadi 3-5 Milestone teknis. Setiap Milestone HARUS mencakup:
+        1. "name": Judul singkat tahap.
+        2. "instruction": Instruksi sangat detail untuk agen coding (path file, logic, dsb).
+        3. "is_ui_stage": Boolean (True jika ini adalah tahap pembuatan Halaman Produk/UI visual).
+
+        FORMAT KELUARAN WAJIB JSON:
+        {{
+            "master_plan_summary": "Ringkasan strategi besar.",
+            "milestones": [
+                {{ "name": "Inisialisasi", "instruction": "...", "is_ui_stage": false }},
+                {{ "name": "Frontend UI", "instruction": "...", "is_ui_stage": true }}
+            ]
+        }}
         """
         try:
-            # Melakukan brainstorming di latar belakang (tanpa vision)
             response = self.client.chat.completions.create(
                 model=DEFAULT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a world-class Software Architect. Expand brief ideas into comprehensive technical blueprints."},
+                    {"role": "system", "content": "You are a Software Architect. Break down missions into professional technical JSON milestones."},
                     {"role": "user", "content": enhancer_prompt}
-                ]
+                ],
+                response_format={"type": "json_object"}
             )
-            enhanced = response.choices[0].message.content.strip()
-            print(f"✅ [BRAINSTORMING DONE] Prompt diperluas.")
-            return enhanced
+            res_data = json.loads(response.choices[0].message.content.strip())
+            print(f"✅ [BRAINSTORMING DONE] {len(res_data.get('milestones', []))} Milestones diciptakan.")
+            return res_data
         except Exception as e:
-            print(f"⚠️ Gagal memperluas prompt: {e}")
-            return brief_task 
+            print(f"⚠️ Gagal brainstorming milestone: {e}")
+            return {
+                "master_plan_summary": brief_task,
+                "milestones": [{"name": "Eksekusi Utama", "instruction": brief_task, "is_ui_stage": True}]
+            }
 
-    async def process_task(self, task_description, update):
-        # --- BRAINSTORMING / PROMPT GENERATOR ---
-        await update.message.reply_text("🧠 **Brainstorming:** Sedang menyusun strategi pembangunan terbaik...")
-        task_description = await self.enhance_prompt(task_description)
+    async def process_task(self, task_brief, update):
+        # --- BRAINSTORMING / MILESTONE GENERATOR ---
+        await update.message.reply_text("🧠 **Brainstorming:** Sedang menyusun strategi pembangunan bertahap...")
+        plan_data = await self.enhance_prompt(task_brief)
         
-        print(f"\n[🚀 MASTER PLAN ACTIVE] START: {task_description[:100]}...")
-        await update.message.reply_text(f"🏘️ **Senior Architect Engine Start**\nTarget telah dioptimasi.")
+        summary = plan_data.get('master_plan_summary', '')
+        milestones = plan_data.get('milestones', [])
+        
+        # Tunjukkan Ringkasan Rencana
+        await update.message.reply_text(f"📝 **STRATEGI BESAR:**\n{summary}\n\n🏃 **Target:** {len(milestones)} Milestones.")
+
+        # Ambil daftar file awal untuk validasi
+        self.initial_files = set(os.listdir(PROJECT_ROOT))
+        self.history = []
+        self.stuck_count = 0
+        self.searched_queries = set()
+        self.search_count = 0
+        max_search_limit = 5
+        
+        # LOOP MILESTONES (INCREMENTAL EXECUTION)
+        for i, ms in enumerate(milestones):
+            ms_name = ms.get('name', f'Stage {i+1}')
+            ms_instruction = ms.get('instruction', '')
+            is_ui = ms.get('is_ui_stage', False)
+            
+            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}")
+            
+            # --- MIN-Autonomous Loop per Milestone ---
+            max_steps = 15 # Fokus pendek per milestone
+            for step in range(max_steps):
+                if not self.driver.ensure_focus(): pass
+                
+                await asyncio.sleep(0.1)
+                raw_img = self.driver.take_screenshot()
+                grid_img = self.draw_grid(raw_img)
+                base64_img = self.encode_image(grid_img)
+                active_win = self.driver.get_active_window()
+                
+                # Context Milestone
+                learning_context = self.memory.get_formatted_for_prompt(active_win, ms_instruction)
+                
+                prompt = f"""
+                CURRENT MILESTONE: {ms_name}
+                OBJECTIVE: {ms_instruction}
+                Progress: Step {step + 1}/{max_steps} in this stage.
+                Active Window: "{active_win}"
+                
+                {learning_context}
+
+                INSTRUCTION:
+                - Jika ini tahap UI (is_ui_stage=True), pastikan tampilan terlihat di layar.
+                - Jika sudah selesai dengan milestone ini, balas dengan status "SELESAI".
+                - Jangan SELESAI jika belum membuat file/perubahan nyata.
+                """
+
+                try:
+                    response = self.client.chat.completions.create(
+                        model=DEFAULT_MODEL,
+                        messages=[
+                            {"role": "system", "content": "You are a professional software developer operator. Return ONLY valid JSON."},
+                            {"role": "user", "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                            ]}
+                        ],
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    res = json.loads(response.choices[0].message.content.strip())
+                    actions = res.get('actions', [])
+                    status = res.get('status', 'PROSES')
+
+                    # LOG NOTIFICATION (Visuals only for UI Stage)
+                    if is_ui and step % 3 == 0:
+                        await update.message.reply_photo(photo=open(grid_img, 'rb'), caption=f"📸 **Progress UI: {ms_name}**")
+
+                    if status == "SELESAI":
+                        # Validasi sederhana
+                        current_files = set(os.listdir(PROJECT_ROOT))
+                        if current_files - self.initial_files or step > 3:
+                            await update.message.reply_text(f"✅ **Milestone Berhasil:** {ms_name}")
+                            break # Lanjut ke Milestone berikutnya
+                        else:
+                            # Paksa lanjut jika belum ada bukti kerja
+                            status = "PROSES"
+
+                    # Execute Actions
+                    for action in actions:
+                        a_type = action.get('type')
+                        a_params = action.get('params', [])
+                        
+                        if a_type == "SEARCH":
+                            if self.search_count < max_search_limit:
+                                query = a_params[0].strip() if a_params else ""
+                                self.last_search_results = self.web_search.get_formatted_string(query)
+                                self.search_count += 1
+                            continue
+
+                        self.driver.execute_action(a_type, a_params)
+                        await asyncio.sleep(0.1)
+
+                except Exception as e:
+                    print(f"⚠️ Error dalam Milestone loop: {e}")
+                    await asyncio.sleep(1)
+
+        await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Milestone telah dikerjakan.")
+        # Kirim layar terakhir jika stage terakhir adalah UI
+        if milestones and milestones[-1].get('is_ui_stage'):
+             raw_img = self.driver.take_screenshot()
+             await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
+
+        # Ambil daftar file awal untuk validasi
+        self.initial_files = set(os.listdir(PROJECT_ROOT))
 
         self.history = []
         self.stuck_count = 0
@@ -180,7 +294,9 @@ class Orchestrator:
                 - SEBELUM MENGETIK: Jika ingin mengetik perintah, CLICK area terminal terlebih dahulu.
                 - Autonomous Decision: Answer IDE checklists/questions with default stacks (Next.js/Tailwind).
                 - Use HOTKEYS when possible.
-                - STATUS SELESAI: Gunakan status "SELESAI" HANYA jika Anda benar-benar yakin seluruh instruksi telah dijalankan (misal: kode sudah tertulis dan disimpan, atau aplikasi sudah running). Jika layar kosong/hanya desktop, Anda harus mencari cara membuka {TARGET_IDE} atau Terminal.
+                - STATUS SELESAI: Gunakan status "SELESAI" HANYA jika Anda yakin semua instruksi telah dijalankan.
+                - ATURAN STOP TEGAS: Dilarang SELESAI jika Anda belum membuat file baru. Langkah pertama wajib berupa inisialisasi (misal: buat README.md atau project_structure.txt).
+                - Jika layar hanya menampilkan desktop pengerjaan Anda dianggap MASIH PROSES. Anda HARUS mengklik {TARGET_IDE} atau Terminal.
 
                 RESPOND WITH VALID JSON:
                 {{
@@ -223,10 +339,17 @@ class Orchestrator:
 
                     actions = res.get('actions', [])
                     if res.get('status') == "SELESAI":
-                        # ANTI-HALLUCINATION PREMATURE FINISH (Skip SELESAI if step < 2)
-                        if step < 2:
-                            print(f"⚠️ Menolak status SELESAI prematur pada langkah {step + 1}")
-                            self.master_plan = f"Lanjutkan pekerjaan. Jangan SELESAI di awal. Buka {TARGET_IDE}, buat file, atau jalankan perintah CLI sesuai instruksi target."
+                        # --- PHYSICAL FILE VALIDATION ---
+                        current_files = set(os.listdir(PROJECT_ROOT))
+                        new_files = current_files - self.initial_files
+                        
+                        # Filter out common junk/logs if any
+                        real_changes = [f for f in new_files if not f.endswith('.log') and f != 'bot.lock']
+                        
+                        if step < 3 or not real_changes:
+                            print(f"⚠️ Menolak status SELESAI prematur (Langkah {step + 1}). Tidak ada file baru terdeteksi.")
+                            self.master_plan = f"Pekerjaan belum selesai. Saya tidak melihat adanya file baru di {PROJECT_ROOT}. Anda WAJIB memulai dengan membuat README.md atau inisialisasi proyek melalui terminal. JANGAN SELESAI jika folder masih kosong!"
+                            await update.message.reply_text("⚠️ **Bot Berusaha Selesai Terlalu Cepat:** Memaksa lanjut ke fase inisialisasi...")
                         else:
                             await update.message.reply_text("✨ **Tugas Selesai.**")
                             break
