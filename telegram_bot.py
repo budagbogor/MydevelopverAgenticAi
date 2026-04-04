@@ -1,5 +1,7 @@
 import os
 import asyncio
+import sys
+import time
 from telegram import BotCommand
 from telegram.ext import Application, MessageHandler, CommandHandler, filters
 from config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_WHITELIST, PROJECT_ROOT, GITHUB_TOKEN, VERCEL_TOKEN, save_config
@@ -14,7 +16,6 @@ class TelegramBot:
         if os.path.exists(self.lock_file):
             print("\n⚠️ PERINGATAN: Bot sudah berjalan di jendela lain!")
             print("Harap tutup bot lama sebelum membuka yang baru.")
-            import sys
             sys.exit(1)
         
         with open(self.lock_file, "w") as f:
@@ -175,12 +176,34 @@ class TelegramBot:
             self.is_processing = False
 
     def run(self):
-        print("🤖 DarkSky Bot is running...")
-        try:
-            self.app.run_polling()
-        finally:
-            if hasattr(self, 'lock_file') and os.path.exists(self.lock_file):
-                try:
-                    os.remove(self.lock_file)
-                except:
-                    pass
+        print("🤖 DarkSky Bot is starting...")
+        retry_delay = 5  # Detik awal untuk retry
+        
+        while True:
+            try:
+                print(f"📡 Mencoba menghubungkan ke Telegram (Delay: {retry_delay}s jika gagal)...")
+                self.app.run_polling(drop_pending_updates=True, close_loop=False) # close_loop=False agar thread tidak mati
+                # Jika keluar secara normal, hentikan loop
+                break 
+            except Exception as e:
+                error_msg = str(e).lower()
+                print(f"⚠️ [CONNECTION ERROR] Gagal menyambung: {e}")
+                
+                # Jika error karena token salah, jangan retry terus menerus
+                if "unauthorized" in error_msg:
+                    print("❌ Error: Token Telegram tidak valid. Menghentikan bot.")
+                    break
+                
+                # Berikan jeda sebelum mencoba lagi
+                time.sleep(retry_delay)
+                # Exponential backoff (maksimal 60 detik)
+                retry_delay = min(retry_delay * 2, 60)
+                print(f"🔄 Mencoba menyambung kembali dalam {retry_delay} detik...")
+                continue
+            finally:
+                # Membersihkan file kunci saat bot benar-benar berhenti
+                if hasattr(self, 'lock_file') and os.path.exists(self.lock_file):
+                    try:
+                        os.remove(self.lock_file)
+                    except:
+                        pass

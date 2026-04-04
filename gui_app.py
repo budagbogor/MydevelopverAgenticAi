@@ -232,6 +232,13 @@ Aplikasi ini membutuhkan beberapa software terinstal agar fitur otonom berjalan 
             bot.run()
         except Exception as ex:
             logging.error(f"🚨 Bot Fatal Error: {str(ex)}")
+            self.status_icon.color = ft.Colors.RED_ACCENT
+            self.status_text.value = "CRASHED"
+            self.status_text.color = ft.Colors.RED_ACCENT
+            self.start_btn.disabled = False
+            self.start_btn.text = "RESTART BOT"
+            self.is_running = False
+            self.page.update()
 
 def main_launcher(page: ft.Page):
     DarkSkyApp(page)
