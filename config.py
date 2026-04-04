@@ -17,7 +17,7 @@ ALLOWED_TELEGRAM_WHITELIST = [u.strip() for u in ALLOWED_TELEGRAM_USER_IDS.split
 # Konfigurasi IDE
 TARGET_IDE = os.getenv("TARGET_IDE", "Trae")
 IDE_PATH = os.getenv("IDE_PATH", r"C:\Users\DarkSky\AppData\Local\Programs\Trae\Trae.exe")
-DPI_SCALE = os.getenv("DPI_SCALE", "1.25") # Default 1.25 untuk monitor Windows modern
+DPI_SCALE = os.getenv("DPI_SCALE", "1.0") # Disesuaikan hasil kalibrasi visual user (1.0)
 
 # Lokasi folder proyek
 PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.getcwd())

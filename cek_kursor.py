@@ -5,35 +5,35 @@ from dotenv import load_dotenv
 
 # Muat variabel DPI_SCALE
 load_dotenv()
-DPI_SCALE = float(os.getenv("DPI_SCALE", "1.0"))
 
 print("="*50)
-print("🚀 DEBUG: ALAT CEK KOORDINAT & DPI")
+print("🚀 ALAT KALIBRASI DPI OTOMATIS")
 print("="*50)
 
 width, height = pyautogui.size()
-print(f"📊 Resolusi Terdeteksi Sistem: {width} x {height}")
-print(f"⚙️ DPI Scale yang Digunakan: {DPI_SCALE}")
+print(f"📊 Resolusi Fisik: {width} x {height}")
 
-# Kalkulasi Target (Sama dengan logika bot)
-def move_to_grid(x_p, y_p):
-    target_x = ((x_p / 100) * width) / DPI_SCALE
-    target_y = ((y_p / 100) * height) / DPI_SCALE
-    print(f"🤖 Moving to Grid [{x_p}%, {y_p}%] -> Pixel ({int(target_x)}, {int(target_y)})")
-    pyautogui.moveTo(target_x, target_y, duration=1.0)
+def test_scale(scale_value):
+    print(f"\n🧪 MENGETES DPI_SCALE: {scale_value}")
+    print("Mouse akan bergerak ke Pojok Kanan Bawah (95%, 95%)...")
+    
+    target_x = ((95 / 100) * width) / scale_value
+    target_y = ((95 / 100) * height) / scale_value
+    
+    pyautogui.moveTo(target_x, target_y, duration=1.5)
     time.sleep(1)
+    # Kembali ke tengah
+    pyautogui.moveTo(width/2, height/2, duration=0.5)
 
-print("\n⚠️ PERHATIAN: Mouse akan bergerak sendiri ke 4 pojok layar Anda.")
-print("Jika kursor tidak mendarat di pojok yang benar, berarti DPI_SCALE salah.\n")
-time.sleep(3)
+print("\nSilakan perhatikan kursor mouse Anda.")
+test_scale(1.0)
+test_scale(1.25)
+test_scale(1.5)
 
-# Tes 4 Pojok
-move_to_grid(5, 5)     # Pojok Kiri Atas
-move_to_grid(95, 5)    # Pojok Kanan Atas
-move_to_grid(95, 95)   # Pojok Kanan Bawah
-move_to_grid(5, 95)    # Pojok Kiri Bawah
-move_to_grid(50, 50)   # Tengah Layar
-
-print("\n✅ Tes Selesai.")
-print("Jika kursor tadi mendarat mendarat di pojok-pojok layar dengan benar maka DPI_SCALE sudah OK.")
-print("Jika kursor mendarat jauh dari pojok, silakan beritahu saya.")
+print("\n" + "="*50)
+print("HASIL TES:")
+print("1. Jika mendarat tepat saat mengetes 1.0 -> Gunakan DPI_SCALE=1.0")
+print("2. Jika mendarat tepat saat mengetes 1.25 -> Gunakan DPI_SCALE=1.25")
+print("3. Jika mendarat tepat saat mengetes 1.5 -> Gunakan DPI_SCALE=1.5")
+print("="*50)
+print("\nManakah yang paling akurat mendarat di pojok kanan bawah?")
