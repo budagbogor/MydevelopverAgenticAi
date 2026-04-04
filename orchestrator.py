@@ -26,6 +26,22 @@ class Orchestrator:
         self.searched_queries = set()
         self.search_count = 0
 
+    def _get_recursive_snapshot(self, directory):
+        """Merekam seluruh struktur file secara rekursif untuk deteksi perubahan yang akurat."""
+        snapshot = {}
+        for root, dirs, files in os.walk(directory):
+            # Abaikan folder sampah untuk performa
+            if any(x in root for x in [".git", "node_modules", "vendor", ".next", "__pycache__"]):
+                continue
+            for name in files:
+                filepath = os.path.join(root, name)
+                try:
+                    stats = os.stat(filepath)
+                    snapshot[filepath] = stats.st_mtime
+                except:
+                    pass
+        return snapshot
+
     def get_image_hash(self, image_path):
         try:
             img = Image.open(image_path).convert('L').resize((64, 64), Image.NEAREST)
@@ -139,11 +155,11 @@ class Orchestrator:
         summary = plan_data.get('master_plan_summary', '')
         milestones = plan_data.get('milestones', [])
         
-        # Tunjukkan Ringkasan Rencana
+        # Ringkasan strategi besar
         await update.message.reply_text(f"📝 **STRATEGI BESAR:**\n{summary}\n\n🏃 **Target:** {len(milestones)} Milestones.")
 
-        # Ambil daftar file awal untuk validasi
-        self.initial_files = set(os.listdir(PROJECT_ROOT))
+        # Snapshot Rekursif Awal
+        self.initial_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
         self.history = []
         self.stuck_count = 0
         self.searched_queries = set()
@@ -208,14 +224,25 @@ class Orchestrator:
                         await update.message.reply_photo(photo=open(grid_img, 'rb'), caption=f"📸 **Progress UI: {ms_name}**")
 
                     if status == "SELESAI":
-                        # Validasi sederhana
-                        current_files = set(os.listdir(PROJECT_ROOT))
-                        if current_files - self.initial_files or step > 3:
-                            await update.message.reply_text(f"✅ **Milestone Berhasil:** {ms_name}")
-                            break # Lanjut ke Milestone berikutnya
-                        else:
-                            # Paksa lanjut jika belum ada bukti kerja
+                        # --- STRICT PHYSICAL VALIDATION (Recursive) ---
+                        current_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
+                        # Cari perbedaan (file baru atau file berubah waktu modifikasinya)
+                        new_files = [f for f in current_snapshot if f not in self.initial_snapshot]
+                        changed_files = [f for f, t in current_snapshot.items() if f in self.initial_snapshot and t > self.initial_snapshot[f]]
+                        
+                        # Filter out logs and lock files
+                        real_changes = [f for f in (new_files + changed_files) if not f.endswith('.log') and "bot.lock" not in f]
+                        
+                        if not real_changes:
+                            print(f"⚠️ REJECTED: Bot mencoba SELESAI Milestone '{ms_name}' tanpa hasil fisik.")
+                            # Suntikkan peringatan ke prompt berikutnya
                             status = "PROSES"
+                            ms_instruction += "\n\nCRITICAL WARNING: Verifikasi gagal. Saya tidak menemukan perubahan file apapun. Anda HARUS menggunakan Terminal (Ctrl+Shift+`) untuk menulis file atau mengeksekusi perubahan nyata sebelum menyatakan Milestone ini SELESAI."
+                        else:
+                            await update.message.reply_text(f"✅ **Milestone Berhasil:** {ms_name}\n📂 Perubahan terdeteksi pada {len(real_changes)} file.")
+                            # Update snapshot untuk milestone berikutnya
+                            self.initial_snapshot = current_snapshot
+                            break # Lanjut ke Milestone berikutnya
 
                     # Execute Actions
                     for action in actions:
@@ -229,6 +256,8 @@ class Orchestrator:
                                 self.search_count += 1
                             continue
 
+                        # Console Logging for Transparency
+                        print(f"🤖 Agent Action: {a_type}({a_params})")
                         self.driver.execute_action(a_type, a_params)
                         await asyncio.sleep(0.1)
 
@@ -239,157 +268,7 @@ class Orchestrator:
         await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Milestone telah dikerjakan.")
         # Kirim layar terakhir jika stage terakhir adalah UI
         if milestones and milestones[-1].get('is_ui_stage'):
-             raw_img = self.driver.take_screenshot()
-             await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
-
-        # Ambil daftar file awal untuk validasi
-        self.initial_files = set(os.listdir(PROJECT_ROOT))
-
-        self.history = []
-        self.stuck_count = 0
-        self.master_plan = ""
-        self.last_screenshot_hash = ""
-        self.last_search_results = ""
-        self.searched_queries = set()
-        self.search_count = 0
-        max_search_limit = 5
-
-        max_steps = 40
-        last_image_path = None
-        
-        try:
-            for step in range(max_steps):
-                if not self.driver.ensure_focus():
-                    print(f"⚠️ Peringatan: Jendela aplikasi target belum aktif.")
-                
-                await asyncio.sleep(0.1) # --- FAST REACTION ---
-                raw_img = self.driver.take_screenshot()
-                current_hash = self.get_image_hash(raw_img)
-                is_stuck = current_hash == self.last_screenshot_hash
-                self.last_screenshot_hash = current_hash
-                
-                if is_stuck: self.stuck_count += 1
-                else: self.stuck_count = 0
-
-                grid_img = self.draw_grid(raw_img)
-                last_image_path = grid_img
-                base64_img = self.encode_image(grid_img)
-                active_win = self.driver.get_active_window()
-                learning_context = self.memory.get_formatted_for_prompt(active_win, task_description)
-
-                prompt = f"""
-                GOAL: {task_description}
-                Step: {step + 1}/{max_steps}
-                Status: {"STUCK" if is_stuck else "OK"}
-                Active Window: "{active_win}"
-                Project: {PROJECT_ROOT}
-                
-                {learning_context}
-
-                MASTER_PLAN: {self.master_plan if self.master_plan else "Inisialisasi."}
-                SEARCH_RESULTS: {self.last_search_results if self.last_search_results else "N/A"}
-
-                INSTRUCTION:
-                - OBSERVASI TERMINAL: JANGAN mengetik "y" atau karakter konfirmasi kecuali Anda melihat JELAS ada pertanyaan "(y/n)" atau "?" di layar.
-                - SEBELUM MENGETIK: Jika ingin mengetik perintah, CLICK area terminal terlebih dahulu.
-                - Autonomous Decision: Answer IDE checklists/questions with default stacks (Next.js/Tailwind).
-                - Use HOTKEYS when possible.
-                - STATUS SELESAI: Gunakan status "SELESAI" HANYA jika Anda yakin semua instruksi telah dijalankan.
-                - ATURAN STOP TEGAS: Dilarang SELESAI jika Anda belum membuat file baru. Langkah pertama wajib berupa inisialisasi (misal: buat README.md atau project_structure.txt).
-                - Jika layar hanya menampilkan desktop pengerjaan Anda dianggap MASIH PROSES. Anda HARUS mengklik {TARGET_IDE} atau Terminal.
-
-                RESPOND WITH VALID JSON:
-                {{
-                    "status": "PROSES/SELESAI",
-                    "critique": "Analisis.",
-                    "new_master_plan": "Update.",
-                    "actions": [
-                        {{ "type": "CLICK", "params": [x, y] }},
-                        {{ "type": "HOTKEY", "params": ["ctrl", "s"] }},
-                        {{ "type": "TYPE", "params": ["text"] }},
-                        {{ "type": "WAIT", "params": [0.1] }}
-                    ]
-                }}
-                """
-
-                try:
-                    response = self.client.chat.completions.create(
-                        model=DEFAULT_MODEL,
-                        messages=[
-                            {"role": "system", "content": "You are a Universal Software Operator. Return ONLY valid JSON."},
-                            {"role": "user", "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-                            ]}
-                        ],
-                        response_format={"type": "json_object"}
-                    )
-                    
-                    raw_content = response.choices[0].message.content.strip()
-                    
-                    try:
-                        res = json.loads(raw_content)
-                    except:
-                        cleaned = re.search(r'(\{.*\})', raw_content, re.DOTALL)
-                        if cleaned: res = json.loads(cleaned.group(1))
-                        else: raise ValueError("JSON Error")
-
-                    if res.get('new_master_plan'):
-                        self.master_plan = res['new_master_plan']
-
-                    actions = res.get('actions', [])
-                    if res.get('status') == "SELESAI":
-                        # --- PHYSICAL FILE VALIDATION ---
-                        current_files = set(os.listdir(PROJECT_ROOT))
-                        new_files = current_files - self.initial_files
-                        
-                        # Filter out common junk/logs if any
-                        real_changes = [f for f in new_files if not f.endswith('.log') and f != 'bot.lock']
-                        
-                        if step < 3 or not real_changes:
-                            print(f"⚠️ Menolak status SELESAI prematur (Langkah {step + 1}). Tidak ada file baru terdeteksi.")
-                            self.master_plan = f"Pekerjaan belum selesai. Saya tidak melihat adanya file baru di {PROJECT_ROOT}. Anda WAJIB memulai dengan membuat README.md atau inisialisasi proyek melalui terminal. JANGAN SELESAI jika folder masih kosong!"
-                            await update.message.reply_text("⚠️ **Bot Berusaha Selesai Terlalu Cepat:** Memaksa lanjut ke fase inisialisasi...")
-                        else:
-                            await update.message.reply_text("✨ **Tugas Selesai.**")
-                            break
-
-                    for action in actions:
-                        a_type = action.get('type')
-                        a_params = action.get('params', [])
-
-                        if a_type == "SEARCH":
-                            if self.search_count < max_search_limit:
-                                query = a_params[0].strip() if a_params else ""
-                                await update.message.reply_text(f"🔍 **Riset:** {query}")
-                                self.last_search_results = self.web_search.get_formatted_string(query)
-                                self.search_count += 1
-                            break 
-
-                        if is_stuck and self.stuck_count >= 2:
-                            recovery_action = ["HOTKEY", ["ctrl", "enter"]] if "trae" in active_win.lower() else ["HOTKEY", ["esc"]]
-                            self.driver.execute_action(recovery_action[0], recovery_action[1])
-                            await update.message.reply_text(f"⚡ **Recovery:** Stuck.")
-                            await asyncio.sleep(0.2)
-                            self.stuck_count = 0
-                            break
-
-                        if a_type:
-                            self.driver.execute_action(a_type, a_params)
-                            # --- ULTRA FAST COMMANDS ---
-                    
-                    await asyncio.sleep(0.1)
-
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Gangguan: {str(e)}")
-                    break
-
-        except Exception as outer_e:
-            await update.message.reply_text(f"❌ Fatal: {str(outer_e)}")
-        
-        finally:
-            if last_image_path and os.path.exists(last_image_path):
-                try:
-                    with open(last_image_path, 'rb') as photo:
-                        await update.message.reply_photo(photo=photo, caption="🖼️ **Layar Terakhir**")
-                except: pass
+             try:
+                 raw_img = self.driver.take_screenshot()
+                 await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
+             except: pass
