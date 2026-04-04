@@ -215,9 +215,12 @@ class Orchestrator:
                 {learning_context}
 
                 INSTRUCTION:
-                - Jika ini tahap UI (is_ui_stage=True), pastikan tampilan terlihat di layar.
-                - Jika sudah selesai dengan milestone ini, balas dengan status "SELESAI".
-                - Jangan SELESAI jika belum membuat file/perubahan nyata.
+                - Your OBJECTIVE is: {ms_instruction}
+                - YOU MUST FOLLOW THIS OBJECTIVE VERBATIM. If the objective says "Ketik di Builder: '...'", you MUST type exactly that text.
+                - NEVER say "SELESAI" if Trae has not finished generating code.
+                - VERIFY PHYSICAL CHANGE: You MUST see new files or code in the editor before finishing.
+                - If stuck, click the input box and re-type.
+                - Balas dengan status "SELESAI" hanya jika pekerjaan sudah benar-benar terwujud di kode.
                 """
 
                 try:
@@ -248,14 +251,14 @@ class Orchestrator:
                         new_files = [f for f in current_snapshot if f not in self.initial_snapshot]
                         changed_files = [f for f, t in current_snapshot.items() if f in self.initial_snapshot and t > self.initial_snapshot[f]]
                         
-                        # Filter out logs and lock files
-                        real_changes = [f for f in (new_files + changed_files) if not f.endswith('.log') and "bot.lock" not in f]
+                        # Filter out logs, lock files, and hidden OS files
+                        real_changes = [f for f in (new_files + changed_files) if not any(x in f for x in ['.log', 'bot.lock', '.DS_Store', 'node_modules', '.next'])]
                         
                         if not real_changes:
-                            print(f"⚠️ REJECTED: Bot mencoba SELESAI Milestone '{ms_name}' tanpa hasil fisik.")
+                            print(f"⚠️ REJECTED: Bot mencoba SELESAI Milestone '{ms_name}' tanpa hasil fisik nyata.")
                             # Suntikkan peringatan ke prompt berikutnya
                             status = "PROSES"
-                            ms_instruction += "\n\nCRITICAL WARNING: Verifikasi gagal. Saya tidak menemukan perubahan file apapun. Anda HARUS menggunakan Terminal (Ctrl+Shift+`) untuk menulis file atau mengeksekusi perubahan nyata sebelum menyatakan Milestone ini SELESAI."
+                            ms_instruction += "\n\nCRITICAL WARNING: Verifikasi gagal. Saya tidak menemukan perubahan file apapun. Anda HARUS mengetikkan instruksi ke Trae Builder (Ctrl+Enter) dan menunggu hingga kode muncul sebelum menyatakan SELESAI."
                         else:
                             await update.message.reply_text(f"✅ **Milestone Berhasil:** {ms_name}\n📂 Perubahan terdeteksi pada {len(real_changes)} file.")
                             # Update snapshot untuk milestone berikutnya
@@ -286,11 +289,11 @@ class Orchestrator:
                         print(f"🤖 Agent Action: {a_type}({a_params})")
                         self.driver.execute_action(a_type, a_params)
                         
-                        # --- AUTO-SUBMIT ENTER (Specific for Builder) ---
+                        # --- AUTO-SUBMIT HOTKEY (Trae Builder) ---
                         if a_type == "TYPE":
                             await asyncio.sleep(0.5)
-                            self.driver.execute_action("ENTER", [])
-                            print("⌨️ Auto-Submit: ENTER sent.")
+                            self.driver.execute_action("HOTKEY", ["ctrl", "enter"])
+                            print("⌨️ Auto-Submit: Ctrl+Enter sent.")
                         
                         await asyncio.sleep(0.8) # Beri jeda lebih lama untuk verifikasi
 
