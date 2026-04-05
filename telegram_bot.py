@@ -24,6 +24,7 @@ class TelegramBot:
         self.app.add_handler(CommandHandler('new_project', self.handle_new_project))
         self.app.add_handler(CommandHandler('deploy_github', self.handle_deploy_github))
         self.app.add_handler(CommandHandler('search', self.handle_search_manual))
+        self.app.add_handler(CommandHandler('stop', self.handle_stop))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
     def is_allowed(self, user_id):
@@ -40,7 +41,8 @@ class TelegramBot:
             BotCommand("new_project", "Buat folder proyek baru"),
             BotCommand("search", "Cari info di web (manual)"),
             BotCommand("deploy_github", "Push kode ke GitHub"),
-            BotCommand("cmd", "Jalankan perintah terminal")
+            BotCommand("cmd", "Jalankan perintah terminal"),
+            BotCommand("stop", "Hentikan paksa bot (Emergency Reset)")
         ]
         await context.bot.set_my_commands(commands)
         
@@ -61,7 +63,8 @@ class TelegramBot:
             "📁 **/new_project [Nama]**: Membuat folder & pindah fokus kerja\n"
             "💻 **/cmd [perintah]**: Menjalankan CLI (contoh: `/cmd dir`)\n"
             "🔍 **/search [query]**: Riset manual ke internet\n"
-            "📦 **/deploy_github**: Mengunggah progress ke Repo Anda\n\n"
+            "📦 **/deploy_github**: Mengunggah progress ke Repo Anda\n"
+            "🛑 **/stop**: Hentikan paksa & reset bot jika macet\n\n"
             "⚡ *Tips:* Gunakan Dashboard Desktop untuk memantau log secara visual!"
         )
         await update.message.reply_text(help_msg, parse_mode='Markdown')
@@ -113,6 +116,11 @@ class TelegramBot:
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
 
+    async def handle_stop(self, update, context):
+        """Emergency Reset Status Bot."""
+        self.is_processing = False
+        await update.message.reply_text("🛑 **BOT DIMATIKAN PAKSA:** Status reset ke Siap (Ready).")
+
     async def handle_deploy_github(self, update, context):
         user_id = update.effective_user.id
         if not self.is_allowed(user_id): return await update.message.reply_text(f"🚫 Akses ditolak (ID Anda: {user_id})")
@@ -150,22 +158,35 @@ class TelegramBot:
 
         text = update.message.text.lower()
         # --- AUTO-PROJECT DETECTION (More Robust) ---
-        new_project_keywords = ["buat aplikasi", "buatkan aplikasi", "bikin aplikasi", "bikin app", "create app", "new project"]
+        new_project_keywords = [
+            "buat aplikasi", "buatkan aplikasi", "bikin aplikasi", "bikin app", 
+            "create app", "new project", "proyek baru", "bikin proyek", "mulai proyek"
+        ]
         
-        if any(text.startswith(kw) for kw in new_project_keywords):
-            # Ambil sisa teks setelah keyword sebagai nama folder
+        current_path = os.getenv("PROJECT_ROOT", "")
+        current_project = os.path.basename(current_path)
+        
+        if any(kw in text for kw in new_project_keywords):
+            # Coba ambil calon nama proyek dari teks
+            potential_name = ""
             for kw in new_project_keywords:
-                if text.startswith(kw):
+                if kw in text:
                     potential_name = text.split(kw, 1)[-1].split("\n")[0].strip()
                     break
             
             folder_name = "".join([c if c.isalnum() else "-" for c in potential_name[:30]]).lower().strip("-")
             
-            current_project = os.path.basename(os.getenv("PROJECT_ROOT", ""))
             if folder_name and folder_name != current_project:
                 await update.message.reply_text(f"🎨 **Intent Proyek Baru Terdeteksi:** `{folder_name}`", parse_mode='Markdown')
                 context.args = [folder_name]
-                await self.handle_new_project(update, context)
+                return await self.handle_new_project(update, context)
+        
+        # PROACTIVE NOTIFICATION: Inform if continuing OLD project
+        await update.message.reply_text(
+            f"🔄 **Melanjutkan di:** `{current_project}`\n"
+            f"💡 *Tip: Jika ini seharusnya proyek baru, gunakan perintah /new_project [nama]*", 
+            parse_mode='Markdown'
+        )
 
         self.is_processing = True
         try:
