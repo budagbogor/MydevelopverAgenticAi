@@ -41,17 +41,26 @@ class Orchestrator:
             
         print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
         
-        # Ekstrak perintah potensial dari instruksi (mencari blok kode atau baris perintah)
-        commands = []
-        if "```" in instruction:
-            commands = re.findall(r'```(?:bash|sh|cmd)?\n(.*?)\n```', instruction, re.DOTALL)
-        else:
-            commands = [instruction]
+        # Ekstrak dari blok kode triple backticks (prioritas utama)
+        commands = re.findall(r'```(?:bash|sh|cmd|powershell)?\n(.*?)\n```', instruction, re.DOTALL)
+        
+        # Jika tidak ada blok kode, coba cari baris tunggal (backticks tunggal)
+        if not commands:
+            commands = re.findall(r'`([^`\n]+)`', instruction)
             
+        # Jika masih tidak ada, JANGAN jalankan instruksi narasi (hindari error 'Buat proyek...')
+        if not commands:
+            print(f"⚠️ [TERMINAL] No executable commands found in instruction. Skipping narrative text.")
+            await update.message.reply_text("⚠️ **Terminal Warning:** Instruksi ini berupa narasi dan tidak mengandung blok kode perintah. Melewati...")
+            return False
+
         for cmd_block in commands:
             for cmd in cmd_block.split('\n'):
                 cmd = cmd.strip()
-                if not cmd or cmd.startswith('#'): continue
+                # Filter kata kunci narasi bahasa Indonesia/Inggris yang sering muncul di awal tapi bukan perintah
+                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "run", "stop", "masuk ke"]
+                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
+                    continue
                 
                 await update.message.reply_text(f"📟 **Executing:** `{cmd}`")
                 try:
