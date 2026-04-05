@@ -32,27 +32,41 @@ class TraeWorker:
         # --- NEW: PANGGIL TRAE BUILDER DENGAN HOTKEY ---
         print(f"🔍 [{self.agent_id}] Focusing Trae Builder (Ctrl+I)...")
         pyautogui.hotkey('ctrl', 'i')
-        await asyncio.sleep(1.5) # Tunggu panel muncul
+        await asyncio.sleep(2.5) # Jeda lebih lama agar UI benar-benar siap
         
         # 3. Ketik instruksi
         print(f"⌨️ Typing instruction: {instruction[:50]}...")
         # Tambahkan klik di area input setelah Ctrl+I untuk kemantapan fokus
         width, height = pyautogui.size()
         pyautogui.click(int(0.85 * width), int(0.73 * height)) 
+        await asyncio.sleep(1.0) # Tunggu kursor berkedip
+        
+        # Bersihkan jika ada teks sisa
+        pyautogui.hotkey('ctrl', 'a')
+        pyautogui.press('backspace')
         await asyncio.sleep(0.5)
         
-        pyautogui.write(str(instruction), interval=0.05) 
-        await asyncio.sleep(1.5)
+        pyautogui.write(str(instruction), interval=0.06) # Sedikit lebih lambat agar stabil
+        await asyncio.sleep(2.0) # Tunggu setelah mengetik selesai
         
-        # 4. Submit (Ctrl+Enter + Klik Fisik)
+        # 4. Submit (Mekanisme Brute-Force)
+        print("🚀 Submitting mission...")
+        # Method 1: Hotkey
         for key in ["ctrl", "enter"]: pyautogui.keyDown(key)
-        time.sleep(0.1)
+        time.sleep(0.2)
         for key in ["enter", "ctrl"]: pyautogui.keyUp(key)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
         
+        # Method 2: Klik tombol Submit (Ikon Panah)
         submit_x = int(0.8990 * width)
         submit_y = int(0.7852 * height)
         pyautogui.click(submit_x, submit_y)
+        await asyncio.sleep(0.5)
+        
+        # Method 3: Standard Enter (3x)
+        for _ in range(3):
+            pyautogui.press('enter')
+            time.sleep(0.2)
         
         # 5. Catat ke SONA
         self.sona.record_step(
