@@ -1,0 +1,36 @@
+agents:
+  - id: queen
+    role: "Project Manager & Architect"
+    model: "gemini/gemini-2.5-pro"
+    capabilities:
+      - task_decomposition
+      - strategy_planning
+      - conflict_resolution
+      - consensus_gathering
+    description: "The central intelligence of the swarm. Decomposes user requests into milestones and delegates tasks to specialists."
+
+  - id: coder_trae
+    role: "Senior Fullstack Developer (Trae Expert)"
+    model: "claude-haiku-4-5"
+    capabilities:
+      - code_generation
+      - gui_interaction
+      - trae_integration
+    description: "Specializes in interacting with the Trae IDE GUI to generate high-quality code and UI components."
+
+  - id: search_bot
+    role: "Documentation & Web Researcher"
+    model: "gemini/gemini-2.5-flash"
+    capabilities:
+      - web_search
+      - documentation_parsing
+    description: "Responsible for finding technical documentation, solving bugs via research, and providing context for new technologies."
+
+  - id: security_auditor
+    role: "Cybersecurity & Code Quality Reviewer"
+    model: "deepseek-r1"
+    capabilities:
+      - security_audit
+      - linting
+      - bug_detection
+    description: "Reviews the generated code for security vulnerabilities and logical errors before final approval."

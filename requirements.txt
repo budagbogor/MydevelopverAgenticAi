@@ -10,3 +10,4 @@ flet>=0.84.0
 pyinstaller>=6.19.0
 winshell>=0.6
 pypiwin32>=223
+pyyaml>=6.0.1

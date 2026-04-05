@@ -5,26 +5,30 @@ import os
 import hashlib
 import time
 import re
+import pyautogui
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
 from search_tool import WebSearch
 from lightning_memory import LightningMemory
-from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL, TARGET_IDE, PROJECT_ROOT
+from swarm.queen import QueenCoordinator
+from swarm.worker_trae import TraeWorker
+from neural.sona import SonaMemory
+from neural.bank import ReasoningBank
 
 class Orchestrator:
     def __init__(self):
-        self.driver = ComputerDriver()
+        self.sona = SonaMemory()
+        self.bank = ReasoningBank()
+        self.queen = QueenCoordinator()
+        self.trae_worker = TraeWorker(self.sona)
+        
+        self.driver = ComputerDriver() # Legacy for fallback
         self.web_search = WebSearch()
-        self.memory = LightningMemory() # LIGHTNING MEMORY INTEGRATION
+        self.memory = LightningMemory() # Legacy support
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
-        self.master_plan = []
-        self.last_screenshot_hash = ""
         self.stuck_count = 0
-        self.last_search_results = ""
-        self.searched_queries = set()
-        self.search_count = 0
 
     def _get_recursive_snapshot(self, directory):
         """Merekam seluruh struktur file secara rekursif untuk deteksi perubahan yang akurat."""
@@ -116,7 +120,7 @@ class Orchestrator:
         
         Pecah menjadi 3-5 Milestone teknis. Setiap Milestone HARUS mencakup:
         1. "name": Judul singkat tahap.
-        2. "instruction": Instruksi SANGAT DETAIL untuk diketikkan ke dalam AI Builder/Prompt (misal: "Ketik di Builder: 'Create a responsive Hero section with Tailwind CSS, a catchy headline, and a dark theme in Hero.tsx'"). JANGAN hanya memberikan nama file.
+        2. "instruction": Instruksi JELAS (Maks 250 karakter) untuk diketikkan ke dalam AI Builder/Prompt (misal: "Create a modern Hero section with Hero.tsx, dark theme, and shadcn buttons"). JANGAN berikan instruksi yang terlalu panjang/bertele-tele karena akan membingungkan pelaksana.
         3. "is_ui_stage": Boolean (True jika ini adalah tahap pembuatan Halaman Produk/UI visual).
 
         FORMAT KELUARAN WAJIB JSON:
@@ -148,166 +152,68 @@ class Orchestrator:
             }
 
     async def process_task(self, task_brief, update):
-        # --- BRAINSTORMING / MILESTONE GENERATOR ---
-        await update.message.reply_text("🧠 **Brainstorming:** Sedang menyusun strategi pembangunan bertahap...")
-        plan_data = await self.enhance_prompt(task_brief)
+        """
+        Orkestrasi Tugas Menggunakan Swarm Intelligence (RuFlo Style).
+        """
+        await update.message.reply_text("👑 **Swarm Queen:** Sedang melakukan dekomposisi misi strategis...")
         
-        summary = plan_data.get('master_plan_summary', '')
-        milestones = plan_data.get('milestones', [])
+        # 1. Dekomposisi tingkat tinggi oleh Queen
+        plan = await self.queen.decompose_task(task_brief)
+        summary = plan.get('strategy', '')
+        milestones = plan.get('milestones', [])
         
-        # Ringkasan strategi besar
         await update.message.reply_text(f"📝 **STRATEGI BESAR:**\n{summary}\n\n🏃 **Target:** {len(milestones)} Milestones.")
-
-        # Snapshot Rekursif Awal
-        self.initial_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
-        self.history = []
-        self.stuck_count = 0
-        self.last_screenshot_hash = "" # Tambahkan tracking hash
-        self.searched_queries = set()
-        self.search_count = 0
-        max_search_limit = 5
         
-        # LOOP MILESTONES (INCREMENTAL EXECUTION)
+        # 2. Inisiasi Track Memory (SONA)
+        self.sona.start_trajectory(task_brief)
+        self.initial_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
+        
+        # 3. Eksekusi Swarm melalui Workers
         for i, ms in enumerate(milestones):
             ms_name = ms.get('name', f'Stage {i+1}')
             ms_instruction = ms.get('instruction', '')
-            is_ui = ms.get('is_ui_stage', False)
+            agent_id = ms.get('required_agent', 'coder_trae')
             
-            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n\n📜 **Instruksi:**\n{ms_instruction}")
+            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{ms_instruction}")
             
-            # --- MIN-Autonomous Loop per Milestone ---
-            max_steps = 15 # Fokus pendek per milestone
-            for step in range(max_steps):
-                if not self.driver.ensure_focus(): pass
+            # Eksekusi Milestones (Trae Worker khusus GUI)
+            if agent_id == 'coder_trae':
+                result = await self.trae_worker.execute_milestone(ms)
+                await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
                 
-                await asyncio.sleep(0.1)
-                raw_img = self.driver.take_screenshot()
-                
-                # --- VISUAL STUCK DETECTION ---
-                current_hash = self.get_image_hash(raw_img)
-                if current_hash == self.last_screenshot_hash:
-                    self.stuck_count += 1
-                else:
-                    self.stuck_count = 0
-                self.last_screenshot_hash = current_hash
-                
-                if self.stuck_count >= 5:
-                    print(f"⚠️ VISUAL STUCK DETECTED di Milestone '{ms_name}'! Mencoba memulihkan fokus...")
-                    self.driver.ensure_focus(force_restart=False)
-                    self.driver.execute_action("HOTKEY", ["esc"])
-                    self.driver.execute_action("CLICK", [50, 50]) # Klik tengah untuk aktivasi
-                    self.stuck_count = 0
-                    await update.message.reply_text(f"⚠️ **Visual Stuck:** Bot mendeteksi layar tidak berubah. Mencoba kalibrasi fokus...")
-                
-                grid_img = self.draw_grid(raw_img)
-                base64_img = self.encode_image(grid_img)
-                active_win = self.driver.get_active_window()
-                
-                # Context Milestone
-                learning_context = self.memory.get_formatted_for_prompt(active_win, ms_instruction)
-                
-                prompt = f"""
-                CURRENT MILESTONE: {ms_name}
-                OBJECTIVE: {ms_instruction}
-                Progress: Step {step + 1}/{max_steps} in this stage.
-                Active Window: "{active_win}"
-                
-                {learning_context}
-
-                INSTRUCTION:
-                - Your OBJECTIVE is: {ms_instruction}
-                - YOU MUST FOLLOW THIS OBJECTIVE VERBATIM. If the objective says "Ketik di Builder: '...'", you MUST type exactly that text.
-                - NEVER say "SELESAI" if Trae has not finished generating code.
-                - VERIFY PHYSICAL CHANGE: You MUST see new files or code in the editor before finishing.
-                - If stuck, click the input box and re-type.
-                - Balas dengan status "SELESAI" hanya jika pekerjaan sudah benar-benar terwujud di kode.
-                """
-
-                try:
-                    response = self.client.chat.completions.create(
-                        model=DEFAULT_MODEL,
-                        messages=[
-                            {"role": "system", "content": "You are a professional software developer operator. Return ONLY valid JSON."},
-                            {"role": "user", "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-                            ]}
-                        ],
-                        response_format={"type": "json_object"}
-                    )
+                # FASE 2: MONITORING LOOP (Tunggu file berubah)
+                max_wait = 60
+                code_found = False
+                for wait_step in range(max_wait):
+                    await asyncio.sleep(2.0)
+                    current_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
+                    real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html'])]
                     
-                    res = json.loads(response.choices[0].message.content.strip())
-                    actions = res.get('actions', [])
-                    status = res.get('status', 'PROSES')
+                    if real_changes:
+                        code_found = True
+                        await update.message.reply_text(f"✅ **Milestone Sukses:** {ms_name}\n📂 File kode terdeteksi.")
+                        self.initial_snapshot = current_snapshot
+                        self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}")
+                        break
+                    
+                    if wait_step % 5 == 0:
+                        print(f"⏳ Monitoring changes for {ms_name}...")
 
-                    # LOG NOTIFICATION (Visuals only for UI Stage)
-                    if is_ui and step % 3 == 0:
-                        await update.message.reply_photo(photo=open(grid_img, 'rb'), caption=f"📸 **Progress UI: {ms_name}**")
+                if not code_found:
+                    await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
+                    self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.")
 
-                    if status == "SELESAI":
-                        # --- STRICT PHYSICAL VALIDATION (Recursive) ---
-                        current_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
-                        # Cari perbedaan (file baru atau file berubah waktu modifikasinya)
-                        new_files = [f for f in current_snapshot if f not in self.initial_snapshot]
-                        changed_files = [f for f, t in current_snapshot.items() if f in self.initial_snapshot and t > self.initial_snapshot[f]]
-                        
-                        # Filter out logs, lock files, and hidden OS files
-                        real_changes = [f for f in (new_files + changed_files) if not any(x in f for x in ['.log', 'bot.lock', '.DS_Store', 'node_modules', '.next'])]
-                        
-                        if not real_changes:
-                            print(f"⚠️ REJECTED: Bot mencoba SELESAI Milestone '{ms_name}' tanpa hasil fisik nyata.")
-                            # Suntikkan peringatan ke prompt berikutnya
-                            status = "PROSES"
-                            ms_instruction += "\n\nCRITICAL WARNING: Verifikasi gagal. Saya tidak menemukan perubahan file apapun. Anda HARUS mengetikkan instruksi ke Trae Builder (Ctrl+Enter) dan menunggu hingga kode muncul sebelum menyatakan SELESAI."
-                        else:
-                            await update.message.reply_text(f"✅ **Milestone Berhasil:** {ms_name}\n📂 Perubahan terdeteksi pada {len(real_changes)} file.")
-                            # Update snapshot untuk milestone berikutnya
-                            self.initial_snapshot = current_snapshot
-                            break # Lanjut ke Milestone berikutnya
+        # 4. Neural Distillation (Knowledge Bank)
+        path = self.sona.end_trajectory("SUCCESS", "Project completed.")
+        with open(path, 'r') as f:
+            trajectory_data = json.load(f)
+            
+        await update.message.reply_text("🧠 **Neural Distillation:** Menyaring pengalaman untuk Knowledge Bank...")
+        ki = await self.bank.distill_trajectory(trajectory_data)
+        if ki:
+            await update.message.reply_text(f"💡 **Pengetahuan Baru Disimpan:**\n*{ki['title']}*\nCategory: {ki['category']}")
 
-                    # Execute Actions (WITH FULL DISCLOSURE)
-                    for action in actions:
-                        a_type = action.get('type')
-                        a_params = action.get('params', [])
-                        
-                        if a_type == "SEARCH":
-                            if self.search_count < max_search_limit:
-                                query = a_params[0].strip() if a_params else ""
-                                self.last_search_results = self.web_search.get_formatted_string(query)
-                                self.search_count += 1
-                            continue
-
-                        # Telegram Mirroring
-                        if a_type == "TYPE":
-                            await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{a_params[0]}`")
-                        elif a_type == "CLICK":
-                            await update.message.reply_text(f"🖱️ **Bot Klik di:** `{a_params}`")
-                        elif a_type == "HOTKEY":
-                            await update.message.reply_text(f"🎹 **Bot Hotkey:** `{a_params}`")
-
-                        # Console Logging
-                        print(f"🤖 Agent Action: {a_type}({a_params})")
-                        self.driver.execute_action(a_type, a_params)
-                        
-                        # --- AUTO-SUBMIT HOTKEY (Trae Builder) ---
-                        if a_type == "TYPE":
-                            await asyncio.sleep(0.5)
-                            self.driver.execute_action("HOTKEY", ["ctrl", "enter"])
-                            print("⌨️ Auto-Submit: Ctrl+Enter sent.")
-                        
-                        await asyncio.sleep(0.8) # Beri jeda lebih lama untuk verifikasi
-
-                        # Kirim Screenshot Bukti jika aksi penting
-                        if a_type in ["TYPE", "CLICK", "ENTER", "HOTKEY"]:
-                             post_img = self.driver.take_screenshot()
-                             post_grid = self.draw_grid(post_img)
-                             await update.message.reply_photo(photo=open(post_grid, 'rb'), caption=f"📸 **Hasil Aksi: {a_type}**")
-
-                except Exception as e:
-                    print(f"⚠️ Error dalam Milestone loop: {e}")
-                    await asyncio.sleep(1)
-
-        await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Milestone telah dikerjakan.")
+        await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Milestone dan Distilasi telah selesai.")
         # Kirim layar terakhir jika stage terakhir adalah UI
         if milestones and milestones[-1].get('is_ui_stage'):
              try:

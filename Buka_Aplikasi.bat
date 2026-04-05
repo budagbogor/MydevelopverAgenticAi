@@ -2,6 +2,10 @@
 title DarkSky Agentic AI Developer - Dashboard
 setlocal enabledelayedexpansion
 
+:: AGAR BISA DIJALANKAN SEBAGAI ADMINISTRATOR 
+:: (Pindah ke folder lokasi script ini berada)
+cd /d "%~dp0"
+
 echo.
 echo  ======================================================
 echo     DARKSKY AGENTIC AI DEVELOPER - GUI LAUNCHER

@@ -114,37 +114,65 @@ class ComputerDriver:
             return 0.0
 
     def execute_action(self, action_type, params):
-        """Eksekusi fisik dengan perlindungan zona bahaya."""
+        """Eksekusi fisik dengan perlindungan zona bahaya dan Super-Focus."""
         try:
+            # --- MANDATORY FOCUS RE-CHECK ---
+            # Pastikan aplikasi target benar-benar di depan sebelum aksi sensitif
+            if action_type in ["CLICK", "TYPE", "HOTKEY"]:
+                self.ensure_focus()
+                
             if action_type == "CLICK":
                 if not params or len(params) < 2: return
                 width, height = pyautogui.size()
                 x_p = self.clean_coord(params[0])
                 y_p = self.clean_coord(params[1])
                 
-                # Proteksi pojok kanan atas (Tombol Close/System Windows) 
-                # Jika di atas 95% lebar dan di bawah 5% tinggi
-                if x_p > 95 and y_p < 5:
-                    print("🛡️ Proteksi: Membatalkan klik pada area sistem CLOSE.")
-                    return
+                # Proteksi pojok kanan atas (Tombol Close)
+                if x_p > 95 and y_p < 5: return
                 
-                target_x = ((x_p / 100) * width) / self.dpi_scale
-                target_y = ((y_p / 100) * height) / self.dpi_scale
+                target_x = (x_p / 100) * width
+                target_y = (y_p / 100) * height
                 
-                # Log untuk debugging user
-                print(f"🤖 CLICK at ({int(target_x)}, {int(target_y)}) - Grid [{x_p}%, {y_p}%]")
-                
-                # Pergerakan mouse lambat agar user bisa melihat highlight
-                pyautogui.moveTo(target_x, target_y, duration=0.5)
+                print(f"🤖 CLICK at ({int(target_x)}, {int(target_y)})")
+                pyautogui.moveTo(target_x, target_y, duration=0.3)
                 pyautogui.click()
                 
             elif action_type == "TYPE":
                 if not params or len(params) < 1: return
-                pyautogui.write(str(params[0]), interval=0.01)
+                # Klik area input terlebih dahulu untuk memastikan kursor aktif
+                print(f"⌨️ Typing Verbatim: {params[0][:30]}...")
+                # Jeda 2 detik (Warm-up) agar Windows/Trae benar-benar siap menerima karakter pertama
+                time.sleep(2.0)
+                pyautogui.write(str(params[0]), interval=0.05)
+                
+                # --- AUTO-SUBMIT (Double Insurance) ---
+                time.sleep(1.0)
+                # 1. Hotkey Submit
+                for key in ["ctrl", "enter"]: pyautogui.keyDown(key)
+                time.sleep(0.1)
+                for key in ["enter", "ctrl"]: pyautogui.keyUp(key)
+                
+                # 2. Click Submit (Presisi: GridX=89.90, GridY=85.00 - Sedikit lebih rendah dari input)
+                time.sleep(1.0)
+                width, height = pyautogui.size()
+                target_x = (89.90 / 100) * width
+                target_y = (85.00 / 100) * height # Menurunkan bidikan agar mengenai tombol kikir
+                pyautogui.moveTo(target_x, target_y, duration=0.2)
+                pyautogui.click()
+                
+                # 3. Triple-Enter Brute Force (Jaminan 100% Terkirim)
+                time.sleep(0.5)
+                for _ in range(3): pyautogui.press('enter')
+                print("✅ Submit Sent (Hotkey + Offset-Click + Triple-Enter)")
                 
             elif action_type == "HOTKEY":
                 if not params: return
-                pyautogui.hotkey(*params)
+                # Eksekusi hotkey dengan jeda manual agar lebih andal
+                for key in params:
+                    pyautogui.keyDown(key)
+                time.sleep(0.1)
+                for key in reversed(params):
+                    pyautogui.keyUp(key)
                 
             elif action_type == "ENTER":
                 pyautogui.press('enter')
