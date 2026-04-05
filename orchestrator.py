@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
 from search_tool import WebSearch
 from lightning_memory import LightningMemory
+from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL, PROJECT_ROOT
 from swarm.queen import QueenCoordinator
 from swarm.worker_trae import TraeWorker
 from neural.sona import SonaMemory
