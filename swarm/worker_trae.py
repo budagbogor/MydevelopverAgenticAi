@@ -36,6 +36,11 @@ class TraeWorker:
         
         # 3. Ketik instruksi
         print(f"⌨️ Typing instruction: {instruction[:50]}...")
+        # Tambahkan klik di area input setelah Ctrl+I untuk kemantapan fokus
+        width, height = pyautogui.size()
+        pyautogui.click(int(0.85 * width), int(0.73 * height)) 
+        await asyncio.sleep(0.5)
+        
         pyautogui.write(str(instruction), interval=0.05) 
         await asyncio.sleep(1.5)
         
