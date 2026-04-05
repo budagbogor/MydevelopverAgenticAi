@@ -2,6 +2,7 @@ import asyncio
 import pyautogui
 import time
 import os
+import pyperclip
 from computer_driver import ComputerDriver
 from neural.sona import SonaMemory
 
@@ -46,8 +47,12 @@ class TraeWorker:
         pyautogui.press('backspace')
         await asyncio.sleep(0.5)
         
-        pyautogui.write(str(instruction), interval=0.06) # Sedikit lebih lambat agar stabil
-        await asyncio.sleep(2.0) # Tunggu setelah mengetik selesai
+        # --- NEW: GUNAKAN CLIPBOARD AGAR TIDAK ADA KARAKTER HILANG ---
+        print(f"📋 [{self.agent_id}] Copying to clipboard and Pasting...")
+        pyperclip.copy(str(instruction))
+        await asyncio.sleep(0.5)
+        pyautogui.hotkey('ctrl', 'v')
+        await asyncio.sleep(1.5) # Tunggu setelah menempel selesai
         
         # 4. Submit (Mekanisme Brute-Force)
         print("🚀 Submitting mission...")
