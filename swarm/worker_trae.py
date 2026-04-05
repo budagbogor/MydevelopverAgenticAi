@@ -29,18 +29,15 @@ class TraeWorker:
         self.driver.ensure_focus()
         await asyncio.sleep(1.0)
         
-        # 2. Koordinat area input Trae (~85%, ~73%)
-        width, height = pyautogui.size()
-        input_x = int(0.85 * width)
-        input_y = int(0.73 * height)
-        
-        pyautogui.click(input_x, input_y)
-        await asyncio.sleep(0.5)
+        # --- NEW: PANGGIL TRAE BUILDER DENGAN HOTKEY ---
+        print(f"🔍 [{self.agent_id}] Focusing Trae Builder (Ctrl+I)...")
+        pyautogui.hotkey('ctrl', 'i')
+        await asyncio.sleep(1.5) # Tunggu panel muncul
         
         # 3. Ketik instruksi
         print(f"⌨️ Typing instruction: {instruction[:50]}...")
-        pyautogui.write(str(instruction), interval=0.03)
-        await asyncio.sleep(1.0)
+        pyautogui.write(str(instruction), interval=0.05) 
+        await asyncio.sleep(1.5)
         
         # 4. Submit (Ctrl+Enter + Klik Fisik)
         for key in ["ctrl", "enter"]: pyautogui.keyDown(key)

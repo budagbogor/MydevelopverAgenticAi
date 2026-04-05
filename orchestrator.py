@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
 from search_tool import WebSearch
 from lightning_memory import LightningMemory
-from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL, PROJECT_ROOT
+from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL
 from swarm.queen import QueenCoordinator
 from swarm.worker_trae import TraeWorker
 from neural.sona import SonaMemory
@@ -167,7 +167,9 @@ class Orchestrator:
         
         # 2. Inisiasi Track Memory (SONA)
         self.sona.start_trajectory(task_brief)
-        self.initial_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
+        # Muat ulang project root dari environment
+        current_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        self.initial_snapshot = self._get_recursive_snapshot(current_root)
         
         # 3. Eksekusi Swarm melalui Workers
         for i, ms in enumerate(milestones):
@@ -187,7 +189,9 @@ class Orchestrator:
                 code_found = False
                 for wait_step in range(max_wait):
                     await asyncio.sleep(2.0)
-                    current_snapshot = self._get_recursive_snapshot(PROJECT_ROOT)
+                    # Selalu gunakan project root terbaru
+                    active_root = os.getenv("PROJECT_ROOT", os.getcwd())
+                    current_snapshot = self._get_recursive_snapshot(active_root)
                     real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html'])]
                     
                     if real_changes:
@@ -198,7 +202,7 @@ class Orchestrator:
                         break
                     
                     if wait_step % 5 == 0:
-                        print(f"⏳ Monitoring changes for {ms_name}...")
+                        print(f"⏳ Monitoring changes for {ms_name} in {active_root}...")
 
                 if not code_found:
                     await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")

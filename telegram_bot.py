@@ -4,7 +4,7 @@ import sys
 import time
 from telegram import BotCommand
 from telegram.ext import Application, MessageHandler, CommandHandler, filters
-from config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_WHITELIST, PROJECT_ROOT, GITHUB_TOKEN, VERCEL_TOKEN, save_config
+from config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_WHITELIST, GITHUB_TOKEN, VERCEL_TOKEN, save_config
 from orchestrator import Orchestrator
 from deployment import DeploymentManager
 from search_tool import WebSearch
@@ -161,7 +161,7 @@ class TelegramBot:
             
             folder_name = "".join([c if c.isalnum() else "-" for c in potential_name[:30]]).lower().strip("-")
             
-            current_project = os.path.basename(PROJECT_ROOT)
+            current_project = os.path.basename(os.getenv("PROJECT_ROOT", ""))
             if folder_name and folder_name != current_project:
                 await update.message.reply_text(f"🎨 **Intent Proyek Baru Terdeteksi:** `{folder_name}`", parse_mode='Markdown')
                 context.args = [folder_name]

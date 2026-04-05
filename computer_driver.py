@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 import pygetwindow as gw
-from config import IDE_PATH, TARGET_IDE, PROJECT_ROOT
+from config import IDE_PATH, TARGET_IDE
 
 class ComputerDriver:
     def __init__(self):
@@ -12,6 +12,8 @@ class ComputerDriver:
         self.screenshot_dir = "screenshots"
         if not os.path.exists(self.screenshot_dir):
             os.makedirs(self.screenshot_dir)
+        
+        self._project_root = os.getenv("PROJECT_ROOT", os.getcwd())
         
         # --- CALIBRATION: DPI SCALE ---
         # Jika layar 4K dengan scaling 150%, set DPI_SCALE=1.5 di .env
@@ -53,6 +55,9 @@ class ComputerDriver:
     def ensure_focus(self, target_name=None, force_restart=False):
         """Memastikan jendela aplikasi aktif secara dinamis."""
         target = target_name if target_name else TARGET_IDE
+        # Muat ulang project root dari environment agar selalu up-to-date
+        self._project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        
         try:
             if force_restart and target == TARGET_IDE:
                 self.close_ide()
@@ -62,7 +67,7 @@ class ComputerDriver:
             target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
             
             # --- SYNC VALIDATION (PROYEK BENAR?) ---
-            project_base = os.path.basename(PROJECT_ROOT)
+            project_base = os.path.basename(self._project_root)
             if target_windows and target == TARGET_IDE:
                 win = target_windows[0]
                 # Jika nama proyek tidak ada di judul jendela, paksa restart
@@ -82,9 +87,9 @@ class ComputerDriver:
             # 2. Jika IDE belum terbuka atau butuh restart
             if target == TARGET_IDE and (not target_windows or force_restart):
                 if force_restart: self.close_ide()
-                print(f"🚀 Menjalankan {target} pada folder: {PROJECT_ROOT}...")
+                print(f"🚀 Menjalankan {target} pada folder: {self._project_root}...")
                 # Gunakan format string tunggal dengan tanda kutip untuk shell=True di Windows
-                cmd = f'"{IDE_PATH}" "{PROJECT_ROOT}"'
+                cmd = f'"{IDE_PATH}" "{self._project_root}"'
                 subprocess.Popen(cmd, shell=True)
                 for _ in range(15):
                     time.sleep(1)
