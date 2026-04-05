@@ -7,6 +7,8 @@ import time
 import re
 import pyautogui
 from openai import OpenAI
+import subprocess
+import webbrowser
 from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
 from search_tool import WebSearch
@@ -30,6 +32,64 @@ class Orchestrator:
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
         self.stuck_count = 0
+        
+    async def _execute_terminal(self, instruction, update):
+        """Menjalankan perintah shell/terminal secara otonom di PROJECT_ROOT."""
+        active_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        if not os.path.exists(active_root):
+            os.makedirs(active_root)
+            
+        print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
+        
+        # Ekstrak perintah potensial dari instruksi (mencari blok kode atau baris perintah)
+        commands = []
+        if "```" in instruction:
+            commands = re.findall(r'```(?:bash|sh|cmd)?\n(.*?)\n```', instruction, re.DOTALL)
+        else:
+            commands = [instruction]
+            
+        for cmd_block in commands:
+            for cmd in cmd_block.split('\n'):
+                cmd = cmd.strip()
+                if not cmd or cmd.startswith('#'): continue
+                
+                await update.message.reply_text(f"📟 **Executing:** `{cmd}`")
+                try:
+                    process = await asyncio.create_subprocess_shell(
+                        cmd,
+                        cwd=active_root,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+                    
+                    if process.returncode == 0:
+                        output = stdout.decode().strip()
+                        if output:
+                            print(f"✅ Output: {output[:100]}...")
+                    else:
+                        error = stderr.decode().strip()
+                        await update.message.reply_text(f"⚠️ **Warning in Terminal:**\n`{error[:200]}`")
+                except Exception as e:
+                    print(f"❌ Terminal Error: {e}")
+        return True
+
+    async def _execute_browser_preview(self, update):
+        """Membuka browser dan mengambil screenshot hasil akhir."""
+        url = "http://localhost:3000" # Default untuk Next.js/Vite
+        await update.message.reply_text(f"🌐 **Opening Browser:** {url}")
+        
+        try:
+            webbrowser.open(url)
+            await asyncio.sleep(5.0) # Tunggu loading
+            
+            # Ambil screenshot
+            img_path = self.driver.take_screenshot()
+            await update.message.reply_photo(photo=open(img_path, 'rb'), caption="📸 **Visual Verification Result**")
+            return True
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Gagal membuka browser: {e}")
+            return False
 
     def _get_recursive_snapshot(self, directory):
         """Merekam seluruh struktur file secara rekursif untuk deteksi perubahan yang akurat."""
@@ -179,7 +239,7 @@ class Orchestrator:
             
             await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{ms_instruction}")
             
-            # Eksekusi Milestones (Trae Worker khusus GUI)
+            # Eksekusi Milestones berdasarkan Agent ID
             if agent_id == 'coder_trae':
                 result = await self.trae_worker.execute_milestone(ms)
                 await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
@@ -189,10 +249,9 @@ class Orchestrator:
                 code_found = False
                 for wait_step in range(max_wait):
                     await asyncio.sleep(2.0)
-                    # Selalu gunakan project root terbaru
                     active_root = os.getenv("PROJECT_ROOT", os.getcwd())
                     current_snapshot = self._get_recursive_snapshot(active_root)
-                    real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html'])]
+                    real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html', '.json'])]
                     
                     if real_changes:
                         code_found = True
@@ -207,6 +266,14 @@ class Orchestrator:
                 if not code_found:
                     await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
                     self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.")
+            
+            elif agent_id == 'terminal_bot':
+                await self._execute_terminal(ms_instruction, update)
+                self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.")
+                
+            elif agent_id == 'browser_bot':
+                await self._execute_browser_preview(update)
+                self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.")
 
         # 4. Neural Distillation (Knowledge Bank)
         path = self.sona.end_trajectory("SUCCESS", "Project completed.")

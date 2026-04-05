@@ -18,6 +18,25 @@ agents:
       - trae_integration
     description: "Specializes in interacting with the Trae IDE GUI to generate high-quality code and UI components."
 
+  - id: terminal_bot
+    role: "System & Terminal Operator"
+    model: "gemini/gemini-2.5-flash"
+    capabilities:
+      - shell_execution
+      - npm_management
+      - git_operations
+      - deployment_triggers
+    description: "Executor for terminal commands such as npm install, running dev server, and pushing to GitHub."
+
+  - id: browser_bot
+    role: "QA & visual Verifier"
+    model: "gemini/gemini-2.5-flash"
+    capabilities:
+      - url_opening
+      - visual_screenshot
+      - end_to_end_verification
+    description: "Opens the locally running project in a browser and takes a screenshot for final confirmation."
+
   - id: search_bot
     role: "Documentation & Web Researcher"
     model: "gemini/gemini-2.5-flash"
