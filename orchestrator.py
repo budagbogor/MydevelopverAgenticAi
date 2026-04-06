@@ -88,13 +88,21 @@ class Orchestrator:
                 
                 # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
                 if "create-vite" in cmd or "create vite" in cmd:
-                    # Ganti nama proyek dengan "./" agar menginisialisasi di folder saat ini
-                    import shlex
-                    cmd = cmd.replace("coffee-shop-landing", "./").replace("coffee-v", "./")
+                    # Pastikan npx -y digunakan agar tidak minta konfirmasi interaktif
+                    if "npx " in cmd and "-y" not in cmd:
+                        cmd = cmd.replace("npx ", "npx -y ")
+                    elif "npm create" in cmd:
+                         cmd = cmd.replace("npm create", "npx -y create")
+                    
+                    # Bersihkan nama proyek: ganti apapun setelah 'create-vite@latest' atau 'vite' dengan './'
+                    # Regex untuk menangkap nama proyek sebelum '--' atau di akhir baris
+                    cmd = re.sub(r'(create-vite@?\S*\s+)(\S+)', r'\1./', cmd)
+                    cmd = re.sub(r'(create\svite@?\S*\s+)(\S+)', r'\1./', cmd)
+                    
                     # Pastikan ada flag --template
                     if "--template" not in cmd:
                         cmd += " --template react"
-                    print(f"🔧 Fixed vite command: {cmd}")
+                    print(f"🔧 [HARDENED] Vite command: {cmd}")
                 
                 await update.message.reply_text(f"📟 **Executing:** `{cmd}`")
                 try:
@@ -107,6 +115,11 @@ class Orchestrator:
                     # TIMEOUT 120 detik! Jika npm menggantung (minta input interaktif), kita lanjut
                     try:
                         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+                        
+                        # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
+                        if any(x in cmd for x in ["create-", "npx ", "init"]):
+                            print("⏳ Settling Delay: Menunggu file sistem (5s)...")
+                            await asyncio.sleep(5)
                     except asyncio.TimeoutError:
                         process.kill()
                         await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>120s). Melanjutkan...")
