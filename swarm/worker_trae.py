@@ -33,31 +33,41 @@ class TraeWorker:
         # --- NEW: PANGGIL TRAE BUILDER DENGAN HOTKEY (Shortcut-First) ---
         print(f"🔍 [{self.agent_id}] Focusing Trae Builder with robust shortcuts...")
         
-        # 1. Bersihkan overlay dengan Escape (agar tidak ada dialog yang menghalangi)
+        # 1. Recursive Focus Strategy (Mencoba 3x untuk memastikan jendela aktif)
+        focus_success = False
+        for i in range(3):
+            if self.driver.ensure_focus():
+                focus_success = True
+                break
+            await asyncio.sleep(1.0)
+            
+        # 2. Bersihkan overlay dengan Escape
         pyautogui.press('esc')
         await asyncio.sleep(0.5)
         
-        # 2. Panggil/Fokus Builder Panel (Ctrl+I)
+        # 3. Panggil/Fokus Builder Panel (Ctrl+I)
         pyautogui.hotkey('ctrl', 'i')
         await asyncio.sleep(1.5)
         
-        # 3. Triple-Focus Strategy (Shortcut + Fallback Click)
+        # 4. Triple-Focus Strategy (Shortcut + Fallback Click)
         print(f"⌨️ Preparing input area...")
-        # A. Mencoba fokus via shortcut (Select All seringkali memfokuskan input aktif)
+        # A. Mencoba fokus via shortcut
         pyautogui.hotkey('ctrl', 'a')
         await asyncio.sleep(0.5)
         
-        # B. Fallback Click (Tetap digunakan sebagai jaminan di posisi layar yang berbeda)
+        # B. Fallback Click (Posisi input Builder)
         width, height = pyautogui.size()
         target_x = int(0.85 * width)
         target_y = int(0.88 * height) 
         pyautogui.click(target_x, target_y)
         await asyncio.sleep(0.5)
         
-        # C. Clear existing text
-        pyautogui.hotkey('ctrl', 'a')
-        pyautogui.press('backspace')
-        await asyncio.sleep(1.0)
+        # C. Brute-Force Clear existing text (Select All + Backspace)
+        # Dilakukan 2x untuk memastikan jika ada dialog 'Accept' atau 'Reject' yang tersisa
+        for _ in range(2):
+            pyautogui.hotkey('ctrl', 'a')
+            pyautogui.press('backspace')
+            await asyncio.sleep(0.5)
         
         # --- NEW: GUNAKAN CLIPBOARD AGAR TIDAK ADA KARAKTER HILANG ---
         print(f"📋 [{self.agent_id}] Copying to clipboard and Pasting...")

@@ -65,78 +65,88 @@ class Orchestrator:
             await update.message.reply_text("⚠️ **Terminal Warning:** Instruksi ini berupa narasi dan tidak mengandung blok kode perintah. Melewati...")
             return False
 
-        print(f"DEBUG: Executing commands: {commands}")
-        for cmd_block in commands:
-            # Pecah perintah berantai (&&) jadi individual agar tidak saling memblokir
-            individual_cmds = []
-            for raw_cmd in cmd_block.split('\n'):
-                for sub_cmd in raw_cmd.split('&&'):
-                    sub_cmd = sub_cmd.strip()
-                    if sub_cmd:
-                        individual_cmds.append(sub_cmd)
-            
-            for cmd in individual_cmds:
-                # Filter narasi bahasa Indonesia/Inggris
-                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
-                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
-                    continue
-                
-                # Skip "cd" commands karena kita sudah set cwd
-                if cmd.strip().startswith("cd "):
-                    print(f"⏭️ Skipping cd command: {cmd}")
-                    continue
-                
-                # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
-                if "create-vite" in cmd or "create vite" in cmd:
-                    # Pastikan npx -y digunakan agar tidak minta konfirmasi interaktif
-                    if "npx " in cmd and "-y" not in cmd:
-                        cmd = cmd.replace("npx ", "npx -y ")
-                    elif "npm create" in cmd:
-                         cmd = cmd.replace("npm create", "npx -y create")
-                    
-                    # Bersihkan nama proyek: ganti apapun setelah 'create-vite@latest' atau 'vite' dengan './'
-                    # Regex untuk menangkap nama proyek sebelum '--' atau di akhir baris
-                    cmd = re.sub(r'(create-vite@?\S*\s+)(\S+)', r'\1./', cmd)
-                    cmd = re.sub(r'(create\svite@?\S*\s+)(\S+)', r'create-vite@latest ./', cmd)
-                    
-                    # Pastikan ada flag --template
-                    if "--template" not in cmd:
-                        cmd += " --template react"
-                    print(f"🔧 [HARDENED] Vite command: {cmd}")
-                
-                await update.message.reply_text(f"📟 **Executing:** `{cmd}`")
-                try:
-                    process = await asyncio.create_subprocess_shell(
-                        cmd,
-                        cwd=active_root,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    # TIMEOUT 120 detik! Jika npm menggantung (minta input interaktif), kita lanjut
-                    try:
-                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
-                        
-                        # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
-                        if any(x in cmd for x in ["create-", "npx ", "init"]):
-                            print("⏳ Settling Delay: Menunggu file sistem (5s)...")
-                            await asyncio.sleep(5)
-                    except asyncio.TimeoutError:
-                        process.kill()
-                        await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>120s). Melanjutkan...")
+            print(f"DEBUG: Executing commands: {commands}")
+            for cmd_block in commands:
+                # INTEGRITY FIX: Gabungkan perintah berantai jika mengandung inisialisasi
+                # Hal ini penting agar 'cd project && npm install' berjalan dalam satu sub-proses shell.
+                if "&&" in cmd_block:
+                    individual_cmds = [cmd_block.strip()]
+                else:
+                    individual_cmds = [l.strip() for l in cmd_block.split('\n') if l.strip()]
+
+                for cmd in individual_cmds:
+                    # Filter narasi
+                    forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
+                    if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
                         continue
                     
-                    if process.returncode == 0:
-                        output = stdout.decode().strip()
-                        if output:
-                            print(f"✅ Output: {output[:200]}...")
-                            await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
-                    else:
-                        error = stderr.decode().strip()
-                        print(f"⚠️ Terminal Error: {error[:200]}")
-                        await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
-                except Exception as e:
-                    print(f"❌ Terminal Error: {e}")
-        return True
+                    # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
+                    if "create-vite" in cmd or "create vite" in cmd:
+                        # 1. Pastikan npx -y dan --no-interactive digunakan agar tidak ada prompt apapun
+                        if "npx " in cmd and "-y" not in cmd:
+                            cmd = cmd.replace("npx ", "npx -y ")
+                        elif "npm create" in cmd:
+                             cmd = cmd.replace("npm create", "npx -y create")
+                        
+                        if "--no-interactive" not in cmd:
+                            cmd = cmd.replace("create-vite ", "create-vite@latest ./ --no-interactive ")
+                            cmd = cmd.replace("create vite ", "create-vite@latest ./ --no-interactive ")
+                        
+                        # 2. Bersihkan nama proyek dari argumen: ganti nama folder yang diberikan dengan './'
+                        # Contoh: npx create-vite my-app -> npx create-vite ./
+                        cmd = re.sub(r'(create-vite@latest\s+)(\S+)', r'\1./', cmd)
+                        
+                        # 3. Clean-up chained 'cd' commands: Jika ada '&& cd [nama_proyek]', buang bagian cd-nya
+                        # Karena kita sudah memaksa instalasi di './'
+                        cmd = re.sub(r'&&\s*cd\s+\S+\s*&&', '&&', cmd)
+                        cmd = re.sub(r'&&\s*cd\s+\S+\s*$', '', cmd)
+
+                        # 4. Pastikan ada flag --template
+                        if "--template" not in cmd:
+                            cmd += " --template react"
+                        print(f"🔧 [HARDENED V2] Project Init command: {cmd}")
+                    
+                    # Skip "cd" individual jika dia berdiri sendiri (tidak dalam rantai &&)
+                    if cmd.strip().startswith("cd ") and "&&" not in cmd:
+                        print(f"⏭️ Skipping standalone cd: {cmd}")
+                        continue
+
+                    await update.message.reply_text(f"📟 **Executing:** `{cmd[:120]}`")
+                    try:
+                        process = await asyncio.create_subprocess_shell(
+                            cmd,
+                            cwd=active_root,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        # TIMEOUT 120 detik! Jika npm menggantung, kita lanjut
+                        try:
+                            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300) # Tingkatkan ke 300s untuk npm install
+                            
+                            # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
+                            if any(x in cmd for x in ["create-", "npx ", "init"]):
+                                print("⏳ Settling Delay: Menunggu file sistem (5s)...")
+                                await asyncio.sleep(5)
+                                
+                            if process.returncode == 0:
+                                output = stdout.decode().strip()
+                                if output:
+                                    print(f"✅ Output: {output[:200]}...")
+                                    await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
+                            else:
+                                error = stderr.decode().strip()
+                                print(f"⚠️ Terminal Error: {error[:200]}")
+                                await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
+                                
+                        except asyncio.TimeoutError:
+                            process.kill()
+                            await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>300s). Melanjutkan...")
+                            
+                    except Exception as e:
+                        print(f"❌ Subprocess Execution Error: {e}")
+                        await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)}`")
+            
+            return True
 
     async def _execute_browser_preview(self, update):
         """Membuka browser dan mengambil screenshot hasil akhir."""
