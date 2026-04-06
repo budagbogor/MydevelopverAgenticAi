@@ -97,7 +97,7 @@ class Orchestrator:
                     # Bersihkan nama proyek: ganti apapun setelah 'create-vite@latest' atau 'vite' dengan './'
                     # Regex untuk menangkap nama proyek sebelum '--' atau di akhir baris
                     cmd = re.sub(r'(create-vite@?\S*\s+)(\S+)', r'\1./', cmd)
-                    cmd = re.sub(r'(create\svite@?\S*\s+)(\S+)', r'\1./', cmd)
+                    cmd = re.sub(r'(create\svite@?\S*\s+)(\S+)', r'create-vite@latest ./', cmd)
                     
                     # Pastikan ada flag --template
                     if "--template" not in cmd:
@@ -137,7 +137,6 @@ class Orchestrator:
                 except Exception as e:
                     print(f"❌ Terminal Error: {e}")
         return True
-
 
     async def _execute_browser_preview(self, update):
         """Membuka browser dan mengambil screenshot hasil akhir."""
@@ -306,8 +305,18 @@ class Orchestrator:
             
             # Eksekusi Milestones berdasarkan Agent ID
             if agent_id == 'coder_trae':
+                # 1. Capture 'Before' Plate (Reflect Pre-state)
+                pre_snapshot = self.driver.capture_screen("reflect_before.png")
+                
                 result = await self.trae_worker.execute_milestone(ms)
                 await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
+                
+                # 2. Reflect Step (Verifikasi Visual)
+                await asyncio.sleep(2.0)
+                post_snapshot = self.driver.capture_screen("reflect_after.png")
+                
+                # Sederhana: Cek performa visual (bisa ditingkatkan dengan OCR/VLM)
+                print(f"📸 [REFLECT] Snapshot diambil untuk milestone: {ms_name}")
                 
                 # FASE 2: MONITORING LOOP (Tunggu file berubah)
                 max_wait = 60
@@ -322,7 +331,7 @@ class Orchestrator:
                         code_found = True
                         await update.message.reply_text(f"✅ **Milestone Sukses:** {ms_name}\n📂 File kode terdeteksi.")
                         self.initial_snapshot = current_snapshot
-                        self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}")
+                        self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}", status="SUCCESS")
                         break
                     
                     if wait_step % 5 == 0:
@@ -330,7 +339,7 @@ class Orchestrator:
 
                 if not code_found:
                     await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
-                    self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.")
+                    self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.", status="TIMEOUT")
             
             elif agent_id == 'terminal_bot':
                 success = await self._execute_terminal(ms_instruction, update)
@@ -352,27 +361,27 @@ class Orchestrator:
                             stdout, stderr = await process.communicate()
                             if process.returncode == 0:
                                 await update.message.reply_text(f"✅ **Auto-Init Berhasil!**")
-                                self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}")
+                                self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}", status="SUCCESS")
                                 continue
                         except Exception as e:
                             print(f"⚠️ Auto-init gagal: {e}")
                     
                     await update.message.reply_text("⚠️ **Terminal Skip:** Perintah tidak valid, melanjutkan ke tahap berikutnya...")
-                    self.sona.record_step(agent_id, "SKIPPED", "No valid terminal commands, continuing pipeline.")
+                    self.sona.record_step(agent_id, "SKIPPED", "No valid terminal commands, continuing pipeline.", status="SKIPPED")
                     continue  # LANJUT ke milestone berikutnya, JANGAN break!
-                self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.")
+                self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.", status="SUCCESS")
                 
             elif agent_id == 'browser_bot':
                 success = await self._execute_browser_preview(update)
                 if not success:
                     await update.message.reply_text("⚠️ **Browser Bot Error:** Gagal mengambil screenshot, melewati...")
-                    self.sona.record_step(agent_id, "WARNING", "Browser preview failed.")
+                    self.sona.record_step(agent_id, "WARNING", "Browser preview failed.", status="FAILED")
                 else:
-                    self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.")
+                    self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.", status="SUCCESS")
 
         # 4. Neural Distillation (Knowledge Bank)
         # Tentukan status akhir berdasarkan apakah ada milestone yang gagal
-        verdict = "SUCCESS" if all(step['status'] == "SUCCESS" for step in self.sona.current_trajectory['steps']) else "FAILED"
+        verdict = "SUCCESS" if all(step.get('status') == "SUCCESS" for step in self.sona.current_trajectory) else "FAILED"
         
         path = self.sona.end_trajectory(verdict, "Project sequence completed.")
         with open(path, 'r') as f:

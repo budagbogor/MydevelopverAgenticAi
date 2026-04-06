@@ -30,22 +30,34 @@ class TraeWorker:
         self.driver.ensure_focus()
         await asyncio.sleep(1.0)
         
-        # --- NEW: PANGGIL TRAE BUILDER DENGAN HOTKEY ---
-        print(f"🔍 [{self.agent_id}] Focusing Trae Builder (Ctrl+I)...")
+        # --- NEW: PANGGIL TRAE BUILDER DENGAN HOTKEY (Shortcut-First) ---
+        print(f"🔍 [{self.agent_id}] Focusing Trae Builder with robust shortcuts...")
+        
+        # 1. Bersihkan overlay dengan Escape (agar tidak ada dialog yang menghalangi)
+        pyautogui.press('esc')
+        await asyncio.sleep(0.5)
+        
+        # 2. Panggil/Fokus Builder Panel (Ctrl+I)
         pyautogui.hotkey('ctrl', 'i')
-        await asyncio.sleep(2.5) # Jeda lebih lama agar UI benar-benar siap
+        await asyncio.sleep(1.5)
         
-        # 3. Ketik instruksi
-        print(f"⌨️ Typing instruction: {instruction[:50]}...")
-        # Tambahkan klik di area input setelah Ctrl+I untuk kemantapan fokus
+        # 3. Triple-Focus Strategy (Shortcut + Fallback Click)
+        print(f"⌨️ Preparing input area...")
+        # A. Mencoba fokus via shortcut (Select All seringkali memfokuskan input aktif)
+        pyautogui.hotkey('ctrl', 'a')
+        await asyncio.sleep(0.5)
+        
+        # B. Fallback Click (Tetap digunakan sebagai jaminan di posisi layar yang berbeda)
         width, height = pyautogui.size()
-        pyautogui.click(int(0.85 * width), int(0.73 * height)) 
-        await asyncio.sleep(1.0) # Tunggu kursor berkedip
+        target_x = int(0.85 * width)
+        target_y = int(0.88 * height) 
+        pyautogui.click(target_x, target_y)
+        await asyncio.sleep(0.5)
         
-        # Bersihkan jika ada teks sisa
+        # C. Clear existing text
         pyautogui.hotkey('ctrl', 'a')
         pyautogui.press('backspace')
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
         
         # --- NEW: GUNAKAN CLIPBOARD AGAR TIDAK ADA KARAKTER HILANG ---
         print(f"📋 [{self.agent_id}] Copying to clipboard and Pasting...")

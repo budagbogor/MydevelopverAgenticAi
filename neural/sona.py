@@ -22,16 +22,17 @@ class SonaMemory:
         self.start_time = datetime.now().isoformat()
         print(f"🧠 [SONA] Starting trajectory for goal: {goal}")
 
-    def record_step(self, agent_id, action, observation, thought=""):
+    def record_step(self, agent_id, action, observation, thought="", status="SUCCESS"):
         step = {
             "timestamp": datetime.now().isoformat(),
             "agent": agent_id,
             "action": action,
             "observation": observation,
-            "thought": thought
+            "thought": thought,
+            "status": status
         }
         self.current_trajectory.append(step)
-        print(f"📍 [SONA] Step recorded for {agent_id}: {action[:50]}...")
+        print(f"📍 [SONA] Step recorded for {agent_id}: {action[:50]}... Status: {status}")
 
     def end_trajectory(self, verdict, conclusion):
         """

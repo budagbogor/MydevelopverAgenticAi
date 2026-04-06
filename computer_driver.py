@@ -53,68 +53,61 @@ class ComputerDriver:
             return "Unknown"
 
     def ensure_focus(self, target_name=None, force_restart=False):
-        """Memastikan jendela aplikasi aktif secara dinamis."""
+        """
+        Memastikan jendela aplikasi aktif secara dinamis.
+        Mendukung fuzzy matching untuk judul jendela.
+        """
         target = target_name if target_name else TARGET_IDE
-        # Muat ulang project root dari environment agar selalu up-to-date
-        self._project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        print(f"🔍 [DRIVER] Mencoba fokus ke: {target}")
         
         try:
+            # Muat ulang project root dari environment agar selalu up-to-date
+            self._project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+            
             if force_restart and target == TARGET_IDE:
                 self.close_ide()
 
-            # 1. Cari jendela yang mirip dengan target
+            # 1. Cari jendela yang mirip dengan target (Fuzzy Search)
             all_windows = gw.getAllWindows()
             target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
             
-            # --- SYNC VALIDATION (PROYEK BENAR?) ---
-            project_base = os.path.basename(self._project_root)
-            if target_windows and target == TARGET_IDE and not force_restart:
-                win = target_windows[0]
-                # Jika nama proyek tidak ada di judul, tunggu dulu — Trae butuh waktu untuk memuat folder
-                if project_base.lower() not in win.title.lower():
-                    print(f"⏳ Judul Trae ('{win.title}') belum menunjukkan '{project_base}'. Menunggu 10 detik...")
-                    time.sleep(10)
-                    # Cek ulang setelah menunggu
-                    all_windows = gw.getAllWindows()
-                    target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
-                    if target_windows:
-                        win = target_windows[0]
-                        if project_base.lower() not in win.title.lower():
-                            # Masih salah setelah menunggu - tapi JANGAN restart jika memang folder baru kosong
-                            print(f"⚠️ Judul masih '{win.title}'. Menerima kondisi ini (folder kosong baru).")
-            
             if target_windows and not force_restart:
-                win = target_windows[0]
-                try:
-                    if win.isMinimized: win.restore()
-                    win.activate()
-                    time.sleep(1.0)
-                    return True
-                except: pass
+                # Prioritaskan jendela yang mengandung nama proyek jika itu IDE
+                project_base = os.path.basename(self._project_root)
+                best_win = target_windows[0]
+                for w in target_windows:
+                    if project_base.lower() in w.title.lower():
+                        best_win = w
+                        break
+                
+                print(f"✅ [DRIVER] Menemukan jendela: {best_win.title}")
+                if best_win.isMinimized: best_win.restore()
+                best_win.activate()
+                time.sleep(1.0)
+                return True
             
-            # 2. Jika IDE belum terbuka atau butuh restart
+            # 2. Jika IDE belum terbuka
             if target == TARGET_IDE and (not target_windows or force_restart):
-                if force_restart: self.close_ide()
                 print(f"🚀 Menjalankan {target} pada folder: {self._project_root}...")
-                # Gunakan format string tunggal dengan tanda kutip untuk shell=True di Windows
                 cmd = f'"{IDE_PATH}" "{self._project_root}"'
                 subprocess.Popen(cmd, shell=True)
+                # Tunggu jendela muncul
                 for _ in range(15):
                     time.sleep(1)
                     if [w for w in gw.getAllWindows() if target.lower() in w.title.lower()]:
                         return True
             
-            # 3. Jika aplikasi umum (misal terminal/browser), biarkan AI yang menanganinya via TYPE 'win' + nama aplikasi
             return False
-                
         except Exception as e:
-            print(f"⚠️ Fokus Gagal untuk {target}: {e}")
-        return False
+            print(f"⚠️ [DRIVER] Fokus Gagal untuk {target}: {e}")
+            return False
 
-    def take_screenshot(self):
-        # Ambil screenshot layar penuh untuk analisis Vision
-        path = os.path.join(self.screenshot_dir, "current_state.png")
-        pyautogui.screenshot(path)
+    def capture_screen(self, filename="current_state.png"):
+        """Mengambil screenshot layar untuk verifikasi visual (Reflect)."""
+        os.makedirs(self.screenshot_dir, exist_ok=True)
+        path = os.path.join(self.screenshot_dir, filename)
+        screenshot = pyautogui.screenshot()
+        screenshot.save(path)
         return path
 
     def clean_coord(self, val):

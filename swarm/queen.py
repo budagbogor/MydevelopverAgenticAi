@@ -45,12 +45,12 @@ class QueenCoordinator:
         INSTRUKSI PENGGUNA: "{user_task}"
         
         WAJIB: Setiap Masterplan HARUS mencakup tahapan berikut (dalam urutan logis):
-        1. "terminal_bot": Inisialisasi Proyek (Berikan perintah `npm init` atau `npm install` dalam blok kode triple backticks).
+        1. "terminal_bot": Inisialisasi Proyek (Berikan perintah `git init && npm install` atau `npx create-vite` dalam blok kode triple backticks).
         2. "coder_trae": Implementasi Kode (Penjelasan naratif untuk asisten Trae).
         3. "terminal_bot": Quality Check & Build (Gunakan `npm run build` dalam blok kode).
         4. "terminal_bot": Start Dev Server (Gunakan `npm run dev` dalam blok kode).
         5. "browser_bot": Visual Verification (Screenshot).
-        6. "terminal_bot": Final Push (Gunakan perintah `git` dalam blok kode).
+        6. "terminal_bot": Final Push (Gunakan perintah `git add . && git commit` dalam blok kode).
 
         PENTING: Jika "required_agent" adalah "terminal_bot", properti "instruction" di bawah ini HANYA boleh berisi blok kode triple backticks dengan perintah shell (Contoh: ```bash npm install ```). DILARANG KERAS menambahkan narasi atau penjelasan manusia di luar blok kode tersebut dalam field "instruction".
 
