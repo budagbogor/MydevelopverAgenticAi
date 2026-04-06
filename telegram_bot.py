@@ -106,11 +106,11 @@ class TelegramBot:
                 await update.message.reply_text(msg)
                 
                 # Paksa tutup dan buka kembali IDE dengan path baru
-                self.orchestrator.driver.ensure_focus(force_restart=True)
-                # Bersihkan tab lama (Clean Slate) hanya jika proyek benar-benar baru
-                if is_new: self.orchestrator.driver.close_all_tabs()
-                # Tunggu sebentar agar IDE benar- benar terbuka sebelum menerima tugas baru
-                await asyncio.sleep(5)
+                self.orchestrator.driver.close_ide()
+                await asyncio.sleep(3)  # Tunggu Trae benar-benar mati
+                self.orchestrator.driver.ensure_focus()  # Buka Trae baru tanpa force_restart
+                # Tunggu Trae benar-benar terbuka dan siap (15 detik untuk folder baru)
+                await asyncio.sleep(10)
             else:
                 await update.message.reply_text("❌ Gagal update .env")
         except Exception as e:

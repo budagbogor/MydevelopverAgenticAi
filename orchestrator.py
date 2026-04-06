@@ -41,26 +41,60 @@ class Orchestrator:
             
         print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
         
-        # Ekstrak dari blok kode triple backticks (prioritas utama)
-        commands = re.findall(r'```(?:bash|sh|cmd|powershell)?\n(.*?)\n```', instruction, re.DOTALL)
+        # Ekstrak dari blok kode triple backticks (prioritas utama) - Lebih fleksibel terhadap spasi/newline
+        commands = re.findall(r'```(?:bash|sh|cmd|powershell)?\s*(.*?)\s*```', instruction, re.DOTALL)
         
         # Jika tidak ada blok kode, coba cari baris tunggal (backticks tunggal)
         if not commands:
             commands = re.findall(r'`([^`\n]+)`', instruction)
             
-        # Jika masih tidak ada, JANGAN jalankan instruksi narasi (hindari error 'Buat proyek...')
+        print(f"DEBUG: Found commands: {commands}")
+            
+        # Jika masih tidak ada, coba cari perintah berbasis kata kunci (Penyelamat jika Queen lalai)
+        if not commands:
+            lines = instruction.split('\n')
+            tech_keywords = ["npm ", "npx ", "git ", "mkdir ", "touch ", "cd "]
+            potential_cmds = [line.strip() for line in lines if any(line.strip().lower().startswith(kw) for kw in tech_keywords)]
+            if potential_cmds:
+                print(f"🪄 [TERMINAL] Magic Extraction: Ditemukan {len(potential_cmds)} perintah tanpa backticks.")
+                commands = ["\n".join(potential_cmds)]
+
+        # Jika TETAP tidak ada, JANGAN jalankan instruksi narasi (hindari error 'Buat proyek...')
         if not commands:
             print(f"⚠️ [TERMINAL] No executable commands found in instruction. Skipping narrative text.")
             await update.message.reply_text("⚠️ **Terminal Warning:** Instruksi ini berupa narasi dan tidak mengandung blok kode perintah. Melewati...")
             return False
 
+        print(f"DEBUG: Executing commands: {commands}")
         for cmd_block in commands:
-            for cmd in cmd_block.split('\n'):
-                cmd = cmd.strip()
-                # Filter kata kunci narasi bahasa Indonesia/Inggris yang sering muncul di awal tapi bukan perintah
-                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "run", "stop", "masuk ke"]
+            # Pecah perintah berantai (&&) jadi individual agar tidak saling memblokir
+            individual_cmds = []
+            for raw_cmd in cmd_block.split('\n'):
+                for sub_cmd in raw_cmd.split('&&'):
+                    sub_cmd = sub_cmd.strip()
+                    if sub_cmd:
+                        individual_cmds.append(sub_cmd)
+            
+            for cmd in individual_cmds:
+                # Filter narasi bahasa Indonesia/Inggris
+                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
                 if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
                     continue
+                
+                # Skip "cd" commands karena kita sudah set cwd
+                if cmd.strip().startswith("cd "):
+                    print(f"⏭️ Skipping cd command: {cmd}")
+                    continue
+                
+                # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
+                if "create-vite" in cmd or "create vite" in cmd:
+                    # Ganti nama proyek dengan "./" agar menginisialisasi di folder saat ini
+                    import shlex
+                    cmd = cmd.replace("coffee-shop-landing", "./").replace("coffee-v", "./")
+                    # Pastikan ada flag --template
+                    if "--template" not in cmd:
+                        cmd += " --template react"
+                    print(f"🔧 Fixed vite command: {cmd}")
                 
                 await update.message.reply_text(f"📟 **Executing:** `{cmd}`")
                 try:
@@ -70,18 +104,27 @@ class Orchestrator:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await process.communicate()
+                    # TIMEOUT 120 detik! Jika npm menggantung (minta input interaktif), kita lanjut
+                    try:
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>120s). Melanjutkan...")
+                        continue
                     
                     if process.returncode == 0:
                         output = stdout.decode().strip()
                         if output:
-                            print(f"✅ Output: {output[:100]}...")
+                            print(f"✅ Output: {output[:200]}...")
+                            await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
                     else:
                         error = stderr.decode().strip()
-                        await update.message.reply_text(f"⚠️ **Warning in Terminal:**\n`{error[:200]}`")
+                        print(f"⚠️ Terminal Error: {error[:200]}")
+                        await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
                 except Exception as e:
                     print(f"❌ Terminal Error: {e}")
         return True
+
 
     async def _execute_browser_preview(self, update):
         """Membuka browser dan mengambil screenshot hasil akhir."""
@@ -277,15 +320,48 @@ class Orchestrator:
                     self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.")
             
             elif agent_id == 'terminal_bot':
-                await self._execute_terminal(ms_instruction, update)
+                success = await self._execute_terminal(ms_instruction, update)
+                if not success:
+                    # Jika gagal ekstrak perintah, coba auto-generate perintah standar
+                    project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+                    project_name = os.path.basename(project_root)
+                    
+                    # Auto-generate: Jika milestone pertama (inisialisasi), jalankan npx create-vite
+                    if i == 0 or "inisialisasi" in ms_name.lower() or "init" in ms_name.lower():
+                        auto_cmd = f"npx -y create-vite@latest ./ -- --template react"
+                        await update.message.reply_text(f"🪄 **Auto-Init:** Queen tidak memberikan perintah valid. Menjalankan fallback:\n`{auto_cmd}`")
+                        # Jalankan auto-command
+                        try:
+                            process = await asyncio.create_subprocess_shell(
+                                auto_cmd, cwd=project_root,
+                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                            )
+                            stdout, stderr = await process.communicate()
+                            if process.returncode == 0:
+                                await update.message.reply_text(f"✅ **Auto-Init Berhasil!**")
+                                self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}")
+                                continue
+                        except Exception as e:
+                            print(f"⚠️ Auto-init gagal: {e}")
+                    
+                    await update.message.reply_text("⚠️ **Terminal Skip:** Perintah tidak valid, melanjutkan ke tahap berikutnya...")
+                    self.sona.record_step(agent_id, "SKIPPED", "No valid terminal commands, continuing pipeline.")
+                    continue  # LANJUT ke milestone berikutnya, JANGAN break!
                 self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.")
                 
             elif agent_id == 'browser_bot':
-                await self._execute_browser_preview(update)
-                self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.")
+                success = await self._execute_browser_preview(update)
+                if not success:
+                    await update.message.reply_text("⚠️ **Browser Bot Error:** Gagal mengambil screenshot, melewati...")
+                    self.sona.record_step(agent_id, "WARNING", "Browser preview failed.")
+                else:
+                    self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.")
 
         # 4. Neural Distillation (Knowledge Bank)
-        path = self.sona.end_trajectory("SUCCESS", "Project completed.")
+        # Tentukan status akhir berdasarkan apakah ada milestone yang gagal
+        verdict = "SUCCESS" if all(step['status'] == "SUCCESS" for step in self.sona.current_trajectory['steps']) else "FAILED"
+        
+        path = self.sona.end_trajectory(verdict, "Project sequence completed.")
         with open(path, 'r') as f:
             trajectory_data = json.load(f)
             

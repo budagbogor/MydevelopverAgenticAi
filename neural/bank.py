@@ -16,10 +16,15 @@ class ReasoningBank:
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
 
     def _load_bank(self):
+        default_structure = {"patterns": [], "resolved_errors": [], "best_practices": []}
         if os.path.exists(self.storage_path):
-            with open(self.storage_path, 'r') as f:
-                return json.load(f)
-        return {"patterns": [], "resolved_errors": [], "best_practices": []}
+            try:
+                with open(self.storage_path, 'r') as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+            except: pass
+        return default_structure
 
     def _save_bank(self):
         with open(self.storage_path, 'w') as f:
@@ -49,17 +54,27 @@ class ReasoningBank:
             response = self.client.chat.completions.create(
                 model=DEFAULT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You convert raw AI execution logs into high-level strategic knowledge."},
+                    {"role": "system", "content": "You convert raw AI execution logs into high-level strategic knowledge. Ensure output is a SINGLE JSON OBJECT."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"}
             )
-            ki = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            print(f"DEBUG: RAW KI CONTENT: {raw_content[:200]}")
+            ki = json.loads(raw_content)
             
-            # Save to bank
-            if ki['category'] == 'pattern': self.bank['patterns'].append(ki)
-            elif ki['category'] == 'error_resolution': self.bank['resolved_errors'].append(ki)
-            else: self.bank['best_practices'].append(ki)
+            # Jika LLM mengembalikan list, ambil elemen pertama
+            if isinstance(ki, list) and len(ki) > 0:
+                ki = ki[0]
+            
+            if not isinstance(ki, dict):
+                raise ValueError("KI is not a dictionary")
+
+            # Save to bank (Gunakan .get untuk antisipasi key hilang)
+            category = ki.get('category', 'best_practice')
+            if category == 'pattern': self.bank['patterns'].append(ki)
+            elif category == 'error_resolution': self.bank['resolved_errors'].append(ki)
+            else: self.bank.setdefault('best_practices', []).append(ki)
             
             self._save_bank()
             return ki

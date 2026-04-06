@@ -68,12 +68,20 @@ class ComputerDriver:
             
             # --- SYNC VALIDATION (PROYEK BENAR?) ---
             project_base = os.path.basename(self._project_root)
-            if target_windows and target == TARGET_IDE:
+            if target_windows and target == TARGET_IDE and not force_restart:
                 win = target_windows[0]
-                # Jika nama proyek tidak ada di judul jendela, paksa restart
+                # Jika nama proyek tidak ada di judul, tunggu dulu — Trae butuh waktu untuk memuat folder
                 if project_base.lower() not in win.title.lower():
-                    print(f"🔄 Judul Jendela Salah ('{win.title}'). Meminta restart untuk folder '{project_base}'...")
-                    force_restart = True
+                    print(f"⏳ Judul Trae ('{win.title}') belum menunjukkan '{project_base}'. Menunggu 10 detik...")
+                    time.sleep(10)
+                    # Cek ulang setelah menunggu
+                    all_windows = gw.getAllWindows()
+                    target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
+                    if target_windows:
+                        win = target_windows[0]
+                        if project_base.lower() not in win.title.lower():
+                            # Masih salah setelah menunggu - tapi JANGAN restart jika memang folder baru kosong
+                            print(f"⚠️ Judul masih '{win.title}'. Menerima kondisi ini (folder kosong baru).")
             
             if target_windows and not force_restart:
                 win = target_windows[0]

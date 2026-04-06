@@ -52,7 +52,7 @@ class QueenCoordinator:
         5. "browser_bot": Visual Verification (Screenshot).
         6. "terminal_bot": Final Push (Gunakan perintah `git` dalam blok kode).
 
-        PENTING: Khusus untuk "terminal_bot", instruksi HARUS berupa perintah shell yang siap eksekusi di dalam blok kode (Contoh: ```bash npm install ```). Jangan kirim naratif bahasa manusia ke terminal.
+        PENTING: Jika "required_agent" adalah "terminal_bot", properti "instruction" di bawah ini HANYA boleh berisi blok kode triple backticks dengan perintah shell (Contoh: ```bash npm install ```). DILARANG KERAS menambahkan narasi atau penjelasan manusia di luar blok kode tersebut dalam field "instruction".
 
         FORMAT KELUARAN (Wajib JSON):
         {{
@@ -61,7 +61,7 @@ class QueenCoordinator:
                 {{
                     "id": 1,
                     "name": "Nama Milestone",
-                    "instruction": "Instruksi detail untuk worker.",
+                    "instruction": "Hanya blok kode untuk terminal_bot, atau penjelasan detail untuk coder_trae.",
                     "required_agent": "terminal_bot" | "coder_trae" | "browser_bot",
                     "is_critical": true
                 }}
