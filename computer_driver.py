@@ -1,9 +1,9 @@
 import pyautogui
 import time
 import os
-import re
 import subprocess
 import pygetwindow as gw
+import uiautomation as auto
 from config import IDE_PATH, TARGET_IDE
 
 class ComputerDriver:
@@ -44,62 +44,52 @@ class ComputerDriver:
         pyautogui.press('w')
         time.sleep(1.0)
 
-    def get_active_window(self):
-        """Mendapatkan judul jendela yang sedang aktif."""
-        try:
-            win = gw.getActiveWindow()
-            return win.title if win else "Desktop/Unknown"
-        except:
-            return "Unknown"
-
     def ensure_focus(self, target_name=None, force_restart=False):
         """
-        Memastikan jendela aplikasi aktif secara dinamis.
-        Mendukung fuzzy matching untuk judul jendela.
+        Memastikan jendela aplikasi aktif secara dinamis menggunakan UI Automation.
         """
         target = target_name if target_name else TARGET_IDE
-        print(f"🔍 [DRIVER] Mencoba fokus ke: {target}")
+        print(f"🔍 [EYES] Mencoba fokus ke: {target}")
         
         try:
-            # Muat ulang project root dari environment agar selalu up-to-date
-            self._project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+            # 1. Cari jendela menggunakan uiautomation (lebih tangguh)
+            root = auto.GetRootControl()
+            # Fuzzy search melalui semua top-level windows
+            target_win = None
+            for win in root.GetChildren():
+                if target.lower() in win.Name.lower():
+                    target_win = win
+                    break
             
-            if force_restart and target == TARGET_IDE:
-                self.close_ide()
-
-            # 1. Cari jendela yang mirip dengan target (Fuzzy Search)
-            all_windows = gw.getAllWindows()
-            target_windows = [w for w in all_windows if target.lower() in w.title.lower()]
-            
-            if target_windows and not force_restart:
-                # Prioritaskan jendela yang mengandung nama proyek jika itu IDE
-                project_base = os.path.basename(self._project_root)
-                best_win = target_windows[0]
-                for w in target_windows:
-                    if project_base.lower() in w.title.lower():
-                        best_win = w
-                        break
+            if target_win and not force_restart:
+                print(f"✅ [EYES] Menemukan jendela via UIA: {target_win.Name}")
+                # Gunakan GetWindowVisualState() sesuai spek uiautomation
+                try:
+                    if target_win.GetWindowVisualState() == auto.WindowVisualState.Minimized:
+                        target_win.SetWindowVisualState(auto.WindowVisualState.Normal)
+                except:
+                    pass
                 
-                print(f"✅ [DRIVER] Menemukan jendela: {best_win.title}")
-                if best_win.isMinimized: best_win.restore()
-                best_win.activate()
+                target_win.SetActive()
+                target_win.SetFocus()
                 time.sleep(1.0)
                 return True
             
-            # 2. Jika IDE belum terbuka
-            if target == TARGET_IDE and (not target_windows or force_restart):
-                print(f"🚀 Menjalankan {target} pada folder: {self._project_root}...")
-                cmd = f'"{IDE_PATH}" "{self._project_root}"'
-                subprocess.Popen(cmd, shell=True)
-                # Tunggu jendela muncul
-                for _ in range(15):
+            # 2. Fallback: Jika uiautomation gagal, coba jalankan IDE
+            if target == TARGET_IDE:
+                print(f"🚀 [EYES] IDE belum terbuka, menjalankan: {IDE_PATH}...")
+                subprocess.Popen(f'"{IDE_PATH}" "{os.getenv("PROJECT_ROOT", os.getcwd())}"', shell=True)
+                # Tunggu jendela muncul (maks 20 detik)
+                for _ in range(20):
                     time.sleep(1)
-                    if [w for w in gw.getAllWindows() if target.lower() in w.title.lower()]:
-                        return True
+                    for win in root.GetChildren():
+                        if target.lower() in win.Name.lower():
+                            win.SetActive()
+                            return True
             
             return False
         except Exception as e:
-            print(f"⚠️ [DRIVER] Fokus Gagal untuk {target}: {e}")
+            print(f"⚠️ [EYES] Gagal fokus ke {target}: {e}")
             return False
 
     def capture_screen(self, filename="current_state.png"):
@@ -109,6 +99,10 @@ class ComputerDriver:
         screenshot = pyautogui.screenshot()
         screenshot.save(path)
         return path
+
+    def take_screenshot(self, filename="current_state.png"):
+        """Alias untuk capture_screen agar kompatibel dengan browser bot."""
+        return self.capture_screen(filename)
 
     def clean_coord(self, val):
         """Membersihkan kotoran teks dari koordinat (X:32 -> 32.0)."""
@@ -151,25 +145,10 @@ class ComputerDriver:
                 time.sleep(2.0)
                 pyautogui.write(str(params[0]), interval=0.05)
                 
-                # --- AUTO-SUBMIT (Double Insurance) ---
+                # --- AUTO-SUBMIT (Insurance) ---
                 time.sleep(1.0)
-                # 1. Hotkey Submit
-                for key in ["ctrl", "enter"]: pyautogui.keyDown(key)
-                time.sleep(0.1)
-                for key in ["enter", "ctrl"]: pyautogui.keyUp(key)
-                
-                # 2. Click Submit (Presisi: GridX=89.90, GridY=85.00 - Sedikit lebih rendah dari input)
-                time.sleep(1.0)
-                width, height = pyautogui.size()
-                target_x = (89.90 / 100) * width
-                target_y = (85.00 / 100) * height # Menurunkan bidikan agar mengenai tombol kikir
-                pyautogui.moveTo(target_x, target_y, duration=0.2)
-                pyautogui.click()
-                
-                # 3. Triple-Enter Brute Force (Jaminan 100% Terkirim)
-                time.sleep(0.5)
-                for _ in range(3): pyautogui.press('enter')
-                print("✅ Submit Sent (Hotkey + Offset-Click + Triple-Enter)")
+                pyautogui.press('enter')
+                print("✅ Submit Sent")
                 
             elif action_type == "HOTKEY":
                 if not params: return

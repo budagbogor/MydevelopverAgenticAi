@@ -3,6 +3,7 @@ import pyautogui
 import time
 import os
 import pyperclip
+import uiautomation as auto
 from computer_driver import ComputerDriver
 from neural.sona import SonaMemory
 
@@ -46,21 +47,51 @@ class TraeWorker:
         await asyncio.sleep(0.5)
         
         # 3. Panggil/Fokus Builder Panel (Ctrl+I)
+        print(f"⌨️ [{self.agent_id}] Panggil Builder via Ctrl+I...")
         pyautogui.hotkey('ctrl', 'i')
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.0)
         
-        # 4. Triple-Focus Strategy (Shortcut + Fallback Click)
-        print(f"⌨️ Preparing input area...")
-        # A. Mencoba fokus via shortcut
-        pyautogui.hotkey('ctrl', 'a')
-        await asyncio.sleep(0.5)
+        # --- NEW: VERIFIKASI ELEMAN "BUILDER" (The Absolute Focus) ---
+        print(f"🔍 [{self.agent_id}] Memverifikasi keberadaan kotak input AI Builder...")
+        builder_input = self._find_builder_input()
         
-        # B. Fallback Click (Posisi input Builder)
-        width, height = pyautogui.size()
-        target_x = int(0.85 * width)
-        target_y = int(0.88 * height) 
-        pyautogui.click(target_x, target_y)
-        await asyncio.sleep(0.5)
+        # Jika tidak ketemu via search, coba ambil yang sedang fokus (sangat akurat setelah Ctrl+I)
+        if not builder_input:
+            focused = auto.GetFocusedControl()
+            # Cek apakah elemen yang fokus ada di dalam jendela Trae secara aman
+            is_trae_element = False
+            try:
+                curr = focused
+                for _ in range(5): # Telusuri ke atas maksimal 5 level
+                    if not curr: break
+                    name = getattr(curr, 'Name', '').lower()
+                    type_name = getattr(curr, 'ControlTypeName', '')
+                    if 'trae' in name or type_name == 'WindowControl':
+                        is_trae_element = True
+                        break
+                    curr = curr.GetParentControl()
+            except: pass
+
+            if focused and (getattr(focused, 'ControlTypeName', '') in ['EditControl', 'DocumentControl'] or is_trae_element):
+                print(f"✅ [{self.agent_id}] Menemukan input melalui FocusedControl: {getattr(focused, 'Name', 'Unknown')}")
+                builder_input = focused
+
+        if builder_input:
+            print(f"✅ [{self.agent_id}] Elemen Builder ditemukan! Fokuskan...")
+            builder_input.SetFocus()
+            builder_input.Click()
+            await asyncio.sleep(0.5)
+            
+            # Bersihkan teks lama secara aman
+            builder_input.SendKeys('{Ctrl}a{Backspace}', waitTime=0.5)
+        else:
+            print(f"⚠️ [{self.agent_id}] Warning: Elemen tidak terdeteksi via UI Tree, beralih ke Fallback Click.")
+            # Fallback Click (Posisi input Builder)
+            width, height = pyautogui.size()
+            target_x = int(0.85 * width)
+            target_y = int(0.88 * height) 
+            pyautogui.click(target_x, target_y)
+            await asyncio.sleep(0.5)
         
         # C. Brute-Force Clear existing text (Select All + Backspace)
         # Dilakukan 2x untuk memastikan jika ada dialog 'Accept' atau 'Reject' yang tersisa
@@ -69,12 +100,26 @@ class TraeWorker:
             pyautogui.press('backspace')
             await asyncio.sleep(0.5)
         
-        # --- NEW: GUNAKAN CLIPBOARD AGAR TIDAK ADA KARAKTER HILANG ---
-        print(f"📋 [{self.agent_id}] Copying to clipboard and Pasting...")
-        pyperclip.copy(str(instruction))
-        await asyncio.sleep(0.5)
-        pyautogui.hotkey('ctrl', 'v')
-        await asyncio.sleep(1.5) # Tunggu setelah menempel selesai
+        # --- NEW: VERIFIKASI INPUT SEBELUM SUBMIT ---
+        if builder_input:
+            try:
+                # Gunakan UIA SendKeys yang lebih andal daripada pyautogui paste
+                builder_input.SendKeys(str(instruction), waitTime=1.0)
+                print(f"✅ [{self.agent_id}] Instruksi disuntikkan via UIA.")
+            except:
+                print(f"📋 [{self.agent_id}] UIA injection gagal, fallback ke Clipboard Paste...")
+                pyperclip.copy(str(instruction))
+                pyautogui.hotkey('ctrl', 'v')
+        else:
+            # Fallback total jika elemen fisik tidak ada
+            pyperclip.copy(str(instruction))
+            pyautogui.hotkey('ctrl', 'v')
+        
+        await asyncio.sleep(1.5)
+        
+        # --- NEW: BUKTI VISUAL (Reflect) ---
+        print(f"📸 [{self.agent_id}] Mengambil bukti input...")
+        self.driver.take_screenshot(f"proof_of_input_{ms_name}.png")
         
         # 4. Submit (Mekanisme Brute-Force)
         print("🚀 Submitting mission...")
@@ -104,6 +149,65 @@ class TraeWorker:
         )
         
         return {"status": "SUCCESS", "milestone": ms_name}
+
+    def _find_builder_input(self):
+        """Mencari elemen input AI Builder di pohon UI (Enhanced)."""
+        try:
+            root = auto.GetRootControl()
+            trae_win = None
+            # Cari jendela Trae secara agresif
+            for win in root.GetChildren():
+                if 'trae' in win.Name.lower():
+                    trae_win = win
+                    break
+            
+            if not trae_win: 
+                print("❌ [EYES] Jendela Trae tidak ditemukan di Root.")
+                return None
+            
+            # Pastikan jendela aktif
+            trae_win.SetActive()
+            
+            # Cari elemen yang bertipe Edit atau Document
+            # Kita coba cari elemen anak yang mungkin merupakan AI Builder
+            # VSCode/Trae Builder seringkali menggunakan 'Edit' dengan AutomationId tertentu
+            def find_recursive(parent, depth=0):
+                if depth > 4: return None # Batasi kedalaman agar cepat
+                children = parent.GetChildren()
+                
+                # Prioritas 1: Elemen yang fokus atau punya nama eksplisit
+                for child in children:
+                    name = child.Name.lower()
+                    type_name = child.ControlTypeName
+                    
+                    # Log untuk debug jika perlu (bisa sangat panjang, hanya jalankan jika buntu)
+                    # print(f"DEBUG: Depth {depth} | {type_name} | Name: {name}")
+                    
+                    if type_name in ['EditControl', 'DocumentControl']:
+                        # AI Builder biasanya tidak punya nama tetap, tapi seringkali kosong atau 'AI'
+                        if any(p in name for p in ['builder', 'ai', 'chat', 'input', 'ask']):
+                            return child
+                        # Fallback: Ambil EditControl pertama yang ditemui jika kedalaman cukup (biasanya input builder)
+                        if depth >= 2:
+                            return child
+                            
+                # Prioritas 2: Telusuri lebih dalam
+                for child in children:
+                    res = find_recursive(child, depth + 1)
+                    if res: return res
+                return None
+            
+            result = find_recursive(trae_win)
+            if not result:
+                # Last resort: Ambil elemen yang sedang fokus saat ini di dalam proses Trae
+                focused = auto.GetFocusedControl()
+                if focused and 'trae' in focused.GetTopLevelWindow().Name.lower():
+                    return focused
+                    
+            return result
+        except Exception as e:
+            print(f"❌ [EYES] Error saat mencari elemen: {e}")
+            return None
 
     async def wait_for_completion(self, initial_snapshot, check_callback, timeout=120):
         """

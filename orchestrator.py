@@ -49,7 +49,23 @@ class Orchestrator:
             commands = re.findall(r'`([^`\n]+)`', instruction)
             
         print(f"DEBUG: Found commands: {commands}")
+        
+        # [NEW] Pre-processing: Bersihkan perintah dari Queen agar selalu non-interaktif
+        processed_commands = []
+        for cmd_block in commands:
+            # Ganti npm create vite atau variasi lainnya dengan npx create-vite@latest ./ --no-interactive
+            # Regex ini menangkap create-vite([@latest]?) [nama_folder] dan menggantinya
+            cmd_block = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite)(?:\s+)?(\S+)?', 
+                               r'\1create-vite@latest ./ --no-interactive ', cmd_block)
             
+            # Pastikan flag --template ada jika belum ada
+            if "create-vite" in cmd_block and "--template" not in cmd_block:
+                cmd_block += " --template react-ts"
+                
+            processed_commands.append(cmd_block)
+        
+        commands = processed_commands
+
         # Jika masih tidak ada, coba cari perintah berbasis kata kunci (Penyelamat jika Queen lalai)
         if not commands:
             lines = instruction.split('\n')
@@ -65,88 +81,120 @@ class Orchestrator:
             await update.message.reply_text("⚠️ **Terminal Warning:** Instruksi ini berupa narasi dan tidak mengandung blok kode perintah. Melewati...")
             return False
 
-            print(f"DEBUG: Executing commands: {commands}")
-            for cmd_block in commands:
-                # INTEGRITY FIX: Gabungkan perintah berantai jika mengandung inisialisasi
-                # Hal ini penting agar 'cd project && npm install' berjalan dalam satu sub-proses shell.
-                if "&&" in cmd_block:
-                    individual_cmds = [cmd_block.strip()]
-                else:
-                    individual_cmds = [l.strip() for l in cmd_block.split('\n') if l.strip()]
+        print(f"DEBUG: Executing commands: {commands}")
+        for cmd_block in commands:
+            # INTEGRITY FIX: Gabungkan perintah berantai jika mengandung inisialisasi
+            # Hal ini penting agar 'cd project && npm install' berjalan dalam satu sub-proses shell.
+            if "&&" in cmd_block:
+                individual_cmds = [cmd_block.strip()]
+            else:
+                individual_cmds = [l.strip() for l in cmd_block.split('\n') if l.strip()]
 
-                for cmd in individual_cmds:
-                    # Filter narasi
-                    forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
-                    if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
-                        continue
+            for cmd in individual_cmds:
+                # Filter narasi
+                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
+                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
+                    continue
+                
+                # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
+                if "create-vite" in cmd or "create vite" in cmd:
+                    # 1. Pastikan npx -y dan --no-interactive digunakan agar tidak ada prompt apapun
+                    if "npx " in cmd and "-y" not in cmd:
+                        cmd = cmd.replace("npx ", "npx -y ")
+                    elif "npm create" in cmd:
+                         cmd = cmd.replace("npm create", "npx -y create")
                     
-                    # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
-                    if "create-vite" in cmd or "create vite" in cmd:
-                        # 1. Pastikan npx -y dan --no-interactive digunakan agar tidak ada prompt apapun
-                        if "npx " in cmd and "-y" not in cmd:
-                            cmd = cmd.replace("npx ", "npx -y ")
-                        elif "npm create" in cmd:
-                             cmd = cmd.replace("npm create", "npx -y create")
-                        
-                        if "--no-interactive" not in cmd:
-                            cmd = cmd.replace("create-vite ", "create-vite@latest ./ --no-interactive ")
-                            cmd = cmd.replace("create vite ", "create-vite@latest ./ --no-interactive ")
-                        
-                        # 2. Bersihkan nama proyek dari argumen: ganti nama folder yang diberikan dengan './'
-                        # Contoh: npx create-vite my-app -> npx create-vite ./
-                        cmd = re.sub(r'(create-vite@latest\s+)(\S+)', r'\1./', cmd)
-                        
-                        # 3. Clean-up chained 'cd' commands: Jika ada '&& cd [nama_proyek]', buang bagian cd-nya
-                        # Karena kita sudah memaksa instalasi di './'
-                        cmd = re.sub(r'&&\s*cd\s+\S+\s*&&', '&&', cmd)
-                        cmd = re.sub(r'&&\s*cd\s+\S+\s*$', '', cmd)
-
-                        # 4. Pastikan ada flag --template
-                        if "--template" not in cmd:
-                            cmd += " --template react"
-                        print(f"🔧 [HARDENED V2] Project Init command: {cmd}")
+                    if "--no-interactive" not in cmd:
+                        cmd = cmd.replace("create-vite ", "create-vite@latest ./ --no-interactive ")
+                        cmd = cmd.replace("create vite ", "create-vite@latest ./ --no-interactive ")
                     
-                    # Skip "cd" individual jika dia berdiri sendiri (tidak dalam rantai &&)
-                    if cmd.strip().startswith("cd ") and "&&" not in cmd:
-                        print(f"⏭️ Skipping standalone cd: {cmd}")
-                        continue
+                    # 2. Bersihkan nama proyek dari argumen: ganti nama folder yang diberikan dengan './'
+                    # Contoh: npx create-vite my-app -> npx create-vite ./
+                    cmd = re.sub(r'(create-vite@latest\s+)(\S+)', r'\1./', cmd)
+                    
+                    # 3. Clean-up chained 'cd' commands: Jika ada '&& cd [nama_proyek]', buang bagian cd-nya
+                    # Karena kita sudah memaksa instalasi di './'
+                    cmd = re.sub(r'&&\s*cd\s+\S+\s*&&', '&&', cmd)
+                    cmd = re.sub(r'&&\s*cd\s+\S+\s*$', '', cmd)
 
-                    await update.message.reply_text(f"📟 **Executing:** `{cmd[:120]}`")
+                    # 4. Pastikan ada flag --template
+                    if "--template" not in cmd:
+                        cmd += " --template react"
+                    print(f"🔧 [HARDENED V2] Project Init command: {cmd}")
+                
+                # Skip "cd" individual jika dia berdiri sendiri (tidak dalam rantai &&)
+                if cmd.strip().startswith("cd ") and "&&" not in cmd:
+                    print(f"⏭️ Skipping standalone cd: {cmd}")
+                    continue
+
+                await update.message.reply_text(f"📟 **Executing:** `{cmd[:120]}`")
+                try:
+                    process = await asyncio.create_subprocess_shell(
+                        cmd,
+                        cwd=active_root,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    # TIMEOUT 120 detik! Jika npm menggantung, kita lanjut
                     try:
-                        process = await asyncio.create_subprocess_shell(
-                            cmd,
-                            cwd=active_root,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        # TIMEOUT 120 detik! Jika npm menggantung, kita lanjut
-                        try:
-                            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300) # Tingkatkan ke 300s untuk npm install
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300) # Tingkatkan ke 300s untuk npm install
+                        
+                        # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
+                        if any(x in cmd for x in ["create-", "npx ", "init"]):
+                            print("⏳ Settling Delay: Menunggu file sistem (5s)...")
+                            await asyncio.sleep(5)
                             
-                            # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
-                            if any(x in cmd for x in ["create-", "npx ", "init"]):
-                                print("⏳ Settling Delay: Menunggu file sistem (5s)...")
-                                await asyncio.sleep(5)
-                                
-                            if process.returncode == 0:
-                                output = stdout.decode().strip()
-                                if output:
-                                    print(f"✅ Output: {output[:200]}...")
-                                    await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
-                            else:
-                                error = stderr.decode().strip()
-                                print(f"⚠️ Terminal Error: {error[:200]}")
-                                await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
-                                
-                        except asyncio.TimeoutError:
-                            process.kill()
-                            await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>300s). Melanjutkan...")
+                            # Jalankan git init jika folder belum merupakan repository git
+                            if not os.path.exists(os.path.join(self.base_dir, ".git")):
+                                print("📂 [GIT] Initializing new repository...")
+                                os.system(f'cd /d "{self.base_dir}" && git init')
                             
-                    except Exception as e:
-                        print(f"❌ Subprocess Execution Error: {e}")
-                        await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)}`")
+                        if process.returncode == 0:
+                            output = stdout.decode().strip()
+                            if output:
+                                print(f"✅ Output: {output[:200]}...")
+                                await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
+                        else:
+                            error = stderr.decode().strip()
+                            print(f"⚠️ Terminal Error: {error[:200]}")
+                            await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
+                            
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>300s). Melanjutkan...")
+                        
+                except Exception as e:
+                    print(f"❌ Subprocess Execution Error: {e}")
+                    await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)}`")
+        
+        # [NEW] [EYES] Verifikasi Integritas Proyek (Mencegah folder kosong)
+        if any("create-vite" in cb or "init" in cb for cb in commands):
+            if not self._verify_project_integrity(active_root):
+                await update.message.reply_text("⛔ **Integrity Error:** Project init gagal (folder kosong). Membatalkan sisa misi.")
+                return False
+        
+        return True
+
+    def _verify_project_integrity(self, path):
+        """Memastikan folder proyek berisi file scaffold Vite yang valid."""
+        critical_files = ["package.json", "index.html"]
+        found_files = os.listdir(path)
+        print(f"🔍 [INTEGRITY] Checking {path}... Found: {found_files}")
+        
+        for f in critical_files:
+            if f not in found_files:
+                return False
+        
+        # Cek apakah package.json berisi scripts dev (bukan file kosong)
+        try:
+            with open(os.path.join(path, "package.json"), "r") as f:
+                data = json.load(f)
+                if "scripts" not in data or "dev" not in data["scripts"]:
+                    return False
+        except:
+            return False
             
-            return True
+        return True
 
     async def _execute_browser_preview(self, update):
         """Membuka browser dan mengambil screenshot hasil akhir."""
@@ -313,99 +361,126 @@ class Orchestrator:
             
             await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{ms_instruction}")
             
-            # Eksekusi Milestones berdasarkan Agent ID
+            # Dispatch ke metode eksekusi agen yang sesuai
             if agent_id == 'coder_trae':
-                # 1. Capture 'Before' Plate (Reflect Pre-state)
-                pre_snapshot = self.driver.capture_screen("reflect_before.png")
-                
-                result = await self.trae_worker.execute_milestone(ms)
-                await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
-                
-                # 2. Reflect Step (Verifikasi Visual)
-                await asyncio.sleep(2.0)
-                post_snapshot = self.driver.capture_screen("reflect_after.png")
-                
-                # Sederhana: Cek performa visual (bisa ditingkatkan dengan OCR/VLM)
-                print(f"📸 [REFLECT] Snapshot diambil untuk milestone: {ms_name}")
-                
-                # FASE 2: MONITORING LOOP (Tunggu file berubah)
-                max_wait = 60
-                code_found = False
-                for wait_step in range(max_wait):
-                    await asyncio.sleep(2.0)
-                    active_root = os.getenv("PROJECT_ROOT", os.getcwd())
-                    current_snapshot = self._get_recursive_snapshot(active_root)
-                    real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html', '.json'])]
-                    
-                    if real_changes:
-                        code_found = True
-                        await update.message.reply_text(f"✅ **Milestone Sukses:** {ms_name}\n📂 File kode terdeteksi.")
-                        self.initial_snapshot = current_snapshot
-                        self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}", status="SUCCESS")
-                        break
-                    
-                    if wait_step % 5 == 0:
-                        print(f"⏳ Monitoring changes for {ms_name} in {active_root}...")
-
-                if not code_found:
-                    await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
-                    self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.", status="TIMEOUT")
-            
+                await self._execute_coder_trae_stage(ms, i, milestones, update)
             elif agent_id == 'terminal_bot':
-                success = await self._execute_terminal(ms_instruction, update)
-                if not success:
-                    # Jika gagal ekstrak perintah, coba auto-generate perintah standar
-                    project_root = os.getenv("PROJECT_ROOT", os.getcwd())
-                    project_name = os.path.basename(project_root)
-                    
-                    # Auto-generate: Jika milestone pertama (inisialisasi), jalankan npx create-vite
-                    if i == 0 or "inisialisasi" in ms_name.lower() or "init" in ms_name.lower():
-                        auto_cmd = f"npx -y create-vite@latest ./ -- --template react"
-                        await update.message.reply_text(f"🪄 **Auto-Init:** Queen tidak memberikan perintah valid. Menjalankan fallback:\n`{auto_cmd}`")
-                        # Jalankan auto-command
-                        try:
-                            process = await asyncio.create_subprocess_shell(
-                                auto_cmd, cwd=project_root,
-                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                            )
-                            stdout, stderr = await process.communicate()
-                            if process.returncode == 0:
-                                await update.message.reply_text(f"✅ **Auto-Init Berhasil!**")
-                                self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}", status="SUCCESS")
-                                continue
-                        except Exception as e:
-                            print(f"⚠️ Auto-init gagal: {e}")
-                    
-                    await update.message.reply_text("⚠️ **Terminal Skip:** Perintah tidak valid, melanjutkan ke tahap berikutnya...")
-                    self.sona.record_step(agent_id, "SKIPPED", "No valid terminal commands, continuing pipeline.", status="SKIPPED")
-                    continue  # LANJUT ke milestone berikutnya, JANGAN break!
-                self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.", status="SUCCESS")
-                
+                await self._execute_terminal_stage(ms, i, milestones, update)
             elif agent_id == 'browser_bot':
-                success = await self._execute_browser_preview(update)
-                if not success:
-                    await update.message.reply_text("⚠️ **Browser Bot Error:** Gagal mengambil screenshot, melewati...")
-                    self.sona.record_step(agent_id, "WARNING", "Browser preview failed.", status="FAILED")
-                else:
-                    self.sona.record_step(agent_id, "SUCCESS", "Browser preview captured.", status="SUCCESS")
+                await self._execute_browser_stage(ms, update)
 
         # 4. Neural Distillation (Knowledge Bank)
-        # Tentukan status akhir berdasarkan apakah ada milestone yang gagal
-        verdict = "SUCCESS" if all(step.get('status') == "SUCCESS" for step in self.sona.current_trajectory) else "FAILED"
+        await self._final_distillation(update)
+    
+    async def _execute_coder_trae_stage(self, ms, i, milestones, update):
+        """Spesifik untuk agen Coder Trae: GUI Interaction + Monitoring."""
+        ms_name = ms.get('name', 'Coder Task')
+        ms_instruction = ms.get('instruction', '')
+        agent_id = 'coder_trae'
         
+        # 1. Reflect Pre-state
+        self.driver.capture_screen("reflect_before.png")
+        
+        # 2. Eksekusi Milestones (Typing)
+        await self.trae_worker.execute_milestone(ms)
+        await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
+        
+        # 3. Reflect Post-state & Monitoring
+        await asyncio.sleep(2.0)
+        self.driver.capture_screen("reflect_after.png")
+        print(f"📸 [REFLECT] Snapshot diambil untuk milestone: {ms_name}")
+
+        # Monitoring Loop untuk deteksi file baru/berubah
+        max_wait = 60
+        code_found = False
+        for wait_step in range(max_wait):
+            await asyncio.sleep(2.0)
+            active_root = os.getenv("PROJECT_ROOT", os.getcwd())
+            current_snapshot = self._get_recursive_snapshot(active_root)
+            real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html', '.json'])]
+            
+            if real_changes:
+                code_found = True
+                await update.message.reply_text(f"✅ **Milestone Sukses:** {ms_name}\n📂 File kode terdeteksi.")
+                self.initial_snapshot = current_snapshot
+                self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}", status="SUCCESS")
+                break
+            
+            if wait_step % 10 == 0:
+                print(f"⏳ Monitoring changes for {ms_name}...")
+
+        if not code_found:
+            await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
+            self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.", status="TIMEOUT")
+
+    async def _execute_terminal_stage(self, ms, i, milestones, update):
+        """Spesifik untuk agen Terminal: Command Line execution."""
+        ms_instruction = ms.get('instruction', '')
+        ms_name = ms.get('name', 'Terminal Task')
+        agent_id = 'terminal_bot'
+        
+        success = await self._execute_terminal(ms_instruction, update)
+        if not success:
+            # Fallback jika Queen gagal memberikan perintah (misal: untuk project init)
+            if i == 0 or any(x in ms_name.lower() for x in ["inisialisasi", "init"]):
+                project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+                auto_cmd = f"npx -y create-vite@latest ./ --template react-ts --no-interactive && npm install"
+                await update.message.reply_text(f"🪄 **Auto-Init Fallback:**\n`{auto_cmd}`")
+                
+                try:
+                    process = await asyncio.create_subprocess_shell(
+                        auto_cmd, cwd=project_root,
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    await process.communicate()
+                    if process.returncode == 0:
+                        await update.message.reply_text(f"✅ **Auto-Init Berhasil!**")
+                        self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}", status="SUCCESS")
+                        return
+                except: pass
+            
+            await update.message.reply_text("⚠️ **Terminal Skip:** Melanjutkan ke tahap berikutnya...")
+            self.sona.record_step(agent_id, "SKIPPED", "No valid commands.", status="SKIPPED")
+        else:
+            self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.", status="SUCCESS")
+
+    async def _execute_browser_stage(self, ms, update):
+        """Spesifik untuk agen Browser Bot: Visual Preview."""
+        success = await self._execute_browser_preview(update)
+        if not success:
+            self.sona.record_step("browser_bot", "WARNING", "Browser preview failed.", status="FAILED")
+        else:
+            self.sona.record_step("browser_bot", "SUCCESS", "Browser preview captured.", status="SUCCESS")
+
+    async def _final_distillation(self, update):
+        """Neural Distillation (Knowledge Bank) + Milestone Final Report."""
+        # Tentukan status akhir
+        verdict = "SUCCESS" if all(step.get('status') == "SUCCESS" for step in self.sona.current_trajectory) else "FAILED"
         path = self.sona.end_trajectory(verdict, "Project sequence completed.")
+        
         with open(path, 'r') as f:
             trajectory_data = json.load(f)
             
         await update.message.reply_text("🧠 **Neural Distillation:** Menyaring pengalaman untuk Knowledge Bank...")
-        ki = await self.bank.distill_trajectory(trajectory_data)
-        if ki:
-            await update.message.reply_text(f"💡 **Pengetahuan Baru Disimpan:**\n*{ki['title']}*\nCategory: {ki['category']}")
+        knowledge_list = await self.bank.distill_trajectory(trajectory_data)
+        
+        # Handle string or list output (Safety)
+        if isinstance(knowledge_list, str):
+            try:
+                knowledge_list = json.loads(knowledge_list)
+            except:
+                knowledge_list = [{"title": "New Knowledge", "category": "general"}]
 
-        await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Milestone dan Distilasi telah selesai.")
-        # Kirim layar terakhir jika stage terakhir adalah UI
-        if milestones and milestones[-1].get('is_ui_stage'):
-             try:
-                 raw_img = self.driver.take_screenshot()
-                 await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
-             except: pass
+        if knowledge_list:
+            if isinstance(knowledge_list, dict): knowledge_list = [knowledge_list]
+            for ki in knowledge_list:
+                if not isinstance(ki, dict): continue
+                title = ki.get('title', 'Untitled Knowledge')
+                await update.message.reply_text(f"💡 **Pengetahuan Baru:**\n*{title}*")
+
+        await update.message.reply_text("✨ **MISI SELESAI:** Seluruh Tahapan dan Distilasi Selesai.")
+        # Ambil screenshot hasil akhir satu kali
+        try:
+            raw_img = self.driver.take_screenshot("final_result.png")
+            await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
+        except: pass
