@@ -7,10 +7,12 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo.
-echo  ======================================================
-echo     DARKSKY AGENTIC AI DEVELOPER - TELEGRAM BOT MODE
-echo  ======================================================
-echo.
+
+:: 0. Force Cleanup All Possible Python Bot Instances
+powershell -Command "Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*main.py --cli*' } | Stop-Process -Force"
+timeout /t 2 /nobreak >nul
+
+if exist bot.lock del /f /q bot.lock >nul 2>&1
 
 :: 1. Cek apakah Python terinstal
 python --version >nul 2>&1
@@ -20,14 +22,16 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: 2. Proteksi Lock File
+:: 2. Proteksi & Pembersihan Instansi Lama (Conflict Protection)
 if exist bot.lock (
     echo [!] ALERT: File bot.lock ditemukan. 
-    echo Ini terjadi jika bot ditutup paksa atau crash sebelumnya.
-    echo.
-    echo Menghapus kunci sesi lama dan masuk sekarang...
-    del /f /q bot.lock
-    echo [OK] Kunci sesi dibersihkan.
+    echo Mencoba membersihkan instansi bot yang masih menggantung...
+    
+    :: Gunakan PowerShell untuk mencari dan mematikan proses python yang menjalankan main.py
+    powershell -Command "Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*main.py --cli*' } | Stop-Process -Force"
+    
+    del /f /q bot.lock >nul 2>&1
+    echo [OK] Instansi lama dibersihkan.
 )
 
 :: 3. Pastikan dependensi terupdate (Latar Belakang)

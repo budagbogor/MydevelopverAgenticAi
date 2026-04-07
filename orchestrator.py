@@ -32,6 +32,7 @@ class Orchestrator:
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
         self.stuck_count = 0
+        self.base_dir = os.getenv("PROJECT_ROOT", os.getcwd())
         
     async def _execute_terminal(self, instruction, update):
         """Menjalankan perintah shell/terminal secara otonom di PROJECT_ROOT."""
@@ -129,15 +130,27 @@ class Orchestrator:
 
                 await update.message.reply_text(f"📟 **Executing:** `{cmd[:120]}`")
                 try:
+                    # DETEKSI PERINTAH SERVER (NON-BLOCKING)
+                    is_server = any(x in cmd.lower() for x in ["run dev", "run start", "vite", "next dev"])
+                    
                     process = await asyncio.create_subprocess_shell(
                         cmd,
                         cwd=active_root,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    # TIMEOUT 120 detik! Jika npm menggantung, kita lanjut
+                    
+                    if is_server:
+                        print(f"🚀 [SERVER] Menjalankan dev server di background: {cmd}")
+                        await update.message.reply_text("🚀 **Server Detected:** Menjalankan di background. Melanjutkan misi...")
+                        # Beri waktu 5s untuk inisialisasi server sebelum lanjut
+                        await asyncio.sleep(5.0)
+                        # Kita tidak melakukan wait_for(process.communicate()) karena ini server
+                        continue
+
+                    # TIMEOUT 300 detik untuk perintah normal (install/build)
                     try:
-                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300) # Tingkatkan ke 300s untuk npm install
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
                         
                         # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
                         if any(x in cmd for x in ["create-", "npx ", "init"]):
@@ -145,9 +158,9 @@ class Orchestrator:
                             await asyncio.sleep(5)
                             
                             # Jalankan git init jika folder belum merupakan repository git
-                            if not os.path.exists(os.path.join(self.base_dir, ".git")):
-                                print("📂 [GIT] Initializing new repository...")
-                                os.system(f'cd /d "{self.base_dir}" && git init')
+                            if not os.path.exists(os.path.join(active_root, ".git")):
+                                print(f"📂 [GIT] Initializing new repository in {active_root}...")
+                                os.system(f'cd /d "{active_root}" && git init')
                             
                         if process.returncode == 0:
                             output = stdout.decode().strip()
@@ -359,7 +372,9 @@ class Orchestrator:
             ms_instruction = ms.get('instruction', '')
             agent_id = ms.get('required_agent', 'coder_trae')
             
-            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{ms_instruction}")
+            # Truncate instruction if too long for Telegram (Limit ~4096)
+            safe_instruction = (ms_instruction[:3500] + '...') if len(ms_instruction) > 3500 else ms_instruction
+            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{safe_instruction}")
             
             # Dispatch ke metode eksekusi agen yang sesuai
             if agent_id == 'coder_trae':

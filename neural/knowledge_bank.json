@@ -12,6 +12,19 @@
                 "UI development",
                 "component structure"
             ]
+        },
+        {
+            "title": "React Landing Page Structure for E-commerce",
+            "category": "pattern",
+            "summary": "This trajectory outlines a pattern for structuring a React landing page for an e-commerce store, including component breakdown, data handling, and styling.",
+            "distillation": "When creating e-commerce landing pages in React, follow these steps: 1. Define product data structure in `src/data.ts` with fields like `id`, `name`, `price`, and `imageUrl`. 2. Create reusable components in `src/components` such as `Header`, `Hero`, `ProductCard`, `ProductList`, and `Footer`. 3. Implement responsive grid layouts using CSS for `ProductList`. 4. Centralize global styling in `src/index.css` and component-specific styling in dedicated CSS files or modules. 5. Import and render all components within `App.tsx` to assemble the landing page.",
+            "keywords": [
+                "React",
+                "landing page",
+                "e-commerce",
+                "component structure",
+                "CSS styling"
+            ]
         }
     ],
     "resolved_errors": [

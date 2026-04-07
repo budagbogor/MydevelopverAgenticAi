@@ -201,21 +201,26 @@ class TelegramBot:
         while True:
             try:
                 print(f"📡 Mencoba menghubungkan ke Telegram (Delay: {retry_delay}s jika gagal)...")
-                self.app.run_polling(drop_pending_updates=True, close_loop=False) # close_loop=False agar thread tidak mati
-                # Jika keluar secara normal, hentikan loop
+                
+                # --- NEW: NUCLEAR CONFLICT RESOLUTION ---
+                # Hapus webhook dan bersihkan sesi yang mungkin menggantung (Conflict)
+                import asyncio
+                temp_bot = asyncio.new_event_loop()
+                asyncio.set_event_loop(temp_bot)
+                temp_bot.run_until_complete(self.app.bot.delete_webhook(drop_pending_updates=True))
+                # -----------------------------------------
+
+                self.app.run_polling(drop_pending_updates=True, close_loop=False)
                 break 
             except Exception as e:
                 error_msg = str(e).lower()
                 print(f"⚠️ [CONNECTION ERROR] Gagal menyambung: {e}")
                 
-                # Jika error karena token salah, jangan retry terus menerus
                 if "unauthorized" in error_msg:
-                    print("❌ Error: Token Telegram tidak valid. Menghentikan bot.")
+                    print("❌ Error: Token Telegram tidak valid.")
                     break
                 
-                # Berikan jeda sebelum mencoba lagi
                 time.sleep(retry_delay)
-                # Exponential backoff (maksimal 60 detik)
                 retry_delay = min(retry_delay * 2, 60)
                 print(f"🔄 Mencoba menyambung kembali dalam {retry_delay} detik...")
                 continue

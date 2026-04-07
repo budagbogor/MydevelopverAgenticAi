@@ -49,7 +49,8 @@ class TraeWorker:
         # 3. Panggil/Fokus Builder Panel (Ctrl+I)
         print(f"⌨️ [{self.agent_id}] Panggil Builder via Ctrl+I...")
         pyautogui.hotkey('ctrl', 'i')
-        await asyncio.sleep(2.0)
+        # Tunggu lebih lama agar panel benar-benar ter-render (2.5s)
+        await asyncio.sleep(2.5)
         
         # --- NEW: VERIFIKASI ELEMAN "BUILDER" (The Absolute Focus) ---
         print(f"🔍 [{self.agent_id}] Memverifikasi keberadaan kotak input AI Builder...")
@@ -75,6 +76,12 @@ class TraeWorker:
             if focused and (getattr(focused, 'ControlTypeName', '') in ['EditControl', 'DocumentControl'] or is_trae_element):
                 print(f"✅ [{self.agent_id}] Menemukan input melalui FocusedControl: {getattr(focused, 'Name', 'Unknown')}")
                 builder_input = focused
+                # Pastikan jendela Utama di Maximized untuk konsistensi koordinat fallback nantinya
+                try:
+                    win = builder_input.GetTopLevelWindow()
+                    if win.GetWindowVisualState() != auto.WindowVisualState.Maximized:
+                        win.SetWindowVisualState(auto.WindowVisualState.Maximized)
+                except: pass
 
         if builder_input:
             print(f"✅ [{self.agent_id}] Elemen Builder ditemukan! Fokuskan...")
@@ -185,7 +192,7 @@ class TraeWorker:
                     
                     if type_name in ['EditControl', 'DocumentControl']:
                         # AI Builder biasanya tidak punya nama tetap, tapi seringkali kosong atau 'AI'
-                        if any(p in name for p in ['builder', 'ai', 'chat', 'input', 'ask']):
+                        if any(p in name for p in ['builder', 'ai', 'chat', 'input', 'ask', 'interactive', 'prompt']):
                             return child
                         # Fallback: Ambil EditControl pertama yang ditemui jika kedalaman cukup (biasanya input builder)
                         if depth >= 2:
