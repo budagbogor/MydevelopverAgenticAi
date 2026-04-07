@@ -45,14 +45,16 @@ class QueenCoordinator:
         INSTRUKSI PENGGUNA: "{user_task}"
         
         WAJIB: Setiap Masterplan HARUS mencakup tahapan berikut (dalam urutan logis):
-        1. "terminal_bot": Inisialisasi Proyek (Gunakan `npx -y create-vite@latest ./ --template react-ts --no-interactive && npm install` dalam blok kode).
-        2. "coder_trae": Implementasi Kode (Penjelasan naratif untuk asisten Trae).
-        3. "terminal_bot": Quality Check & Build (Gunakan `npm run build` dalam blok kode).
-        4. "terminal_bot": Start Dev Server (Gunakan `npm run dev` dalam blok kode).
-        5. "browser_bot": Visual Verification (Screenshot).
-        6. "terminal_bot": Final Push (Gunakan `git add . && git commit` dalam blok kode).
+        1. "terminal_bot": Inisialisasi Proyek (Web: Vite; Mobile: `npx react-native@latest init` atau `flutter create .`).
+        2. "terminal_bot": Clean Slate (Hapus file default: `rm -rf src/*` di Web atau bersihkan boilerplate di Mobile).
+        3. "devops_quality": Arsitektur Folder (PRO-MAX Standard: `src/components`, `src/hooks`, `src/services`, `src/types`, `src/theme`).
+        4. "ux_ui_designer": Design System (Gunakan Standar PREMIUM: Material 3, Tamagui, atau shadcn/ui).
+        5. "coder_internal": Implementasi Kode Utama (Gunakan Standar PRO-MAX dari neural knowledge).
+        6. "terminal_bot": Quality Check & Build.
+        7. "terminal_bot": Start Server / Emulator.
+        8. "browser_bot" atau "vision_bot": Visual Verification.
 
-        PENTING: Jika "required_agent" adalah "terminal_bot", properti "instruction" di bawah ini HANYA boleh berisi blok kode triple backticks dengan perintah shell (Contoh: ```bash npm install ```). DILARANG KERAS menambahkan narasi atau penjelasan manusia di luar blok kode tersebut dalam field "instruction".
+        PENTING: Jika "required_agent" adalah "terminal_bot", properti "instruction" di bawah ini HANYA boleh berisi blok kode triple backticks dengan perintah shell. DILARANG KERAS menambahkan narasi atau penjelasan manusia di luar blok kode tersebut dalam field "instruction".
 
         FORMAT KELUARAN (Wajib JSON):
         {{
@@ -61,8 +63,8 @@ class QueenCoordinator:
                 {{
                     "id": 1,
                     "name": "Nama Milestone",
-                    "instruction": "Hanya blok kode untuk terminal_bot, atau penjelasan detail untuk coder_trae.",
-                    "required_agent": "terminal_bot" | "coder_trae" | "browser_bot",
+                    "instruction": "Blok kode terminal atau instruksi koding detail.",
+                    "required_agent": "terminal_bot" | "coder_internal" | "browser_bot",
                     "is_critical": true
                 }}
             ]
@@ -100,7 +102,7 @@ class QueenCoordinator:
             
             # 1. Pilih Worker (untuk saat ini kita hanya punya Trae Worker)
             # Logika seleksi agen bisa lebih kompleks di masa depan
-            agent_id = ms.get('required_agent', 'coder_trae')
+            agent_id = ms.get('required_agent', 'coder_internal')
             
             # 2. Eksekusi melalui worker (akan diimplementasikan di worker_trae.py)
             # Placeholder for worker execution

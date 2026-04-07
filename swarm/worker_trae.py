@@ -54,7 +54,22 @@ class TraeWorker:
         
         # --- NEW: VERIFIKASI ELEMAN "BUILDER" (The Absolute Focus) ---
         print(f"🔍 [{self.agent_id}] Memverifikasi keberadaan kotak input AI Builder...")
-        builder_input = self._find_builder_input()
+        
+        # Cari jendela Trae untuk mendapatkan PID
+        root = auto.GetRootControl()
+        trae_win = None
+        for win in root.GetChildren():
+            if 'trae' in win.Name.lower():
+                trae_win = win
+                break
+        
+        builder_input = None
+        if trae_win:
+            # [NEW] Ambil ProcessId dari jendela utama Trae untuk filter elemen
+            trae_pid = trae_win.ProcessId
+            
+            # Cari input builder
+            builder_input = self._find_builder_input(trae_win, trae_pid)
         
         # Jika tidak ketemu via search, coba ambil yang sedang fokus (sangat akurat setelah Ctrl+I)
         if not builder_input:
@@ -130,6 +145,7 @@ class TraeWorker:
         
         # 4. Submit (Mekanisme Brute-Force)
         print("🚀 Submitting mission...")
+        width, height = pyautogui.size()
         # Method 1: Hotkey
         for key in ["ctrl", "enter"]: pyautogui.keyDown(key)
         time.sleep(0.2)
@@ -157,44 +173,28 @@ class TraeWorker:
         
         return {"status": "SUCCESS", "milestone": ms_name}
 
-    def _find_builder_input(self):
-        """Mencari elemen input AI Builder di pohon UI (Enhanced)."""
+    def _find_builder_input(self, trae_win, trae_pid=None):
+        """
+        Mencari elemen input AI Builder secara rekursif di dalam jendela Trae.
+        """
         try:
-            root = auto.GetRootControl()
-            trae_win = None
-            # Cari jendela Trae secara agresif
-            for win in root.GetChildren():
-                if 'trae' in win.Name.lower():
-                    trae_win = win
-                    break
-            
-            if not trae_win: 
-                print("❌ [EYES] Jendela Trae tidak ditemukan di Root.")
-                return None
-            
             # Pastikan jendela aktif
             trae_win.SetActive()
             
-            # Cari elemen yang bertipe Edit atau Document
-            # Kita coba cari elemen anak yang mungkin merupakan AI Builder
-            # VSCode/Trae Builder seringkali menggunakan 'Edit' dengan AutomationId tertentu
-            def find_recursive(parent, depth=0):
-                if depth > 4: return None # Batasi kedalaman agar cepat
-                children = parent.GetChildren()
+            def find_recursive(el, depth=0):
+                if depth > 10: return None
                 
-                # Prioritas 1: Elemen yang fokus atau punya nama eksplisit
+                children = el.GetChildren()
+                # Prioritas 1: Langsung cari EditControl/DocumentControl
                 for child in children:
-                    name = child.Name.lower()
                     type_name = child.ControlTypeName
-                    
-                    # Log untuk debug jika perlu (bisa sangat panjang, hanya jalankan jika buntu)
-                    # print(f"DEBUG: Depth {depth} | {type_name} | Name: {name}")
+                    name = child.Name.lower()
                     
                     if type_name in ['EditControl', 'DocumentControl']:
-                        # AI Builder biasanya tidak punya nama tetap, tapi seringkali kosong atau 'AI'
+                        # AI Builder biasanya tidak punya nama tetap, tapi seringkali mengandung kata kunci
                         if any(p in name for p in ['builder', 'ai', 'chat', 'input', 'ask', 'interactive', 'prompt']):
                             return child
-                        # Fallback: Ambil EditControl pertama yang ditemui jika kedalaman cukup (biasanya input builder)
+                        # Fallback: Ambil EditControl pertama yang ditemui jika kedalaman cukup
                         if depth >= 2:
                             return child
                             
@@ -206,10 +206,18 @@ class TraeWorker:
             
             result = find_recursive(trae_win)
             if not result:
-                # Last resort: Ambil elemen yang sedang fokus saat ini di dalam proses Trae
+                # Last resort: Ambil elemen yang sedang fokus saat ini jika milik proses Trae
                 focused = auto.GetFocusedControl()
-                if focused and 'trae' in focused.GetTopLevelWindow().Name.lower():
-                    return focused
+                if focused:
+                    try:
+                        # Gunakan ProcessId daripada GetTopLevelWindow() yang rapuh
+                        if trae_pid and focused.ProcessId == trae_pid:
+                            return focused
+                        # Jika trae_pid tidak ada, minimal cek tipenya
+                        if focused.ControlTypeName in ['EditControl', 'DocumentControl']:
+                            return focused
+                    except:
+                        pass
                     
             return result
         except Exception as e:

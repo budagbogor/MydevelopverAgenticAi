@@ -1,0 +1,26 @@
+{
+  "name": "Professional Web Architecture Pattern",
+  "root_folders": [
+    "src/components",
+    "src/hooks",
+    "src/services",
+    "src/types",
+    "src/utils",
+    "src/assets",
+    "src/styles",
+    "src/contexts"
+  ],
+  "naming_conventions": {
+    "components": "PascalCase (e.g., HeroSection.tsx)",
+    "hooks": "camelCase starting with use (e.g., useAuth.ts)",
+    "services": "camelCase (e.g., apiService.ts)",
+    "types": "kebab-case (e.g., user-types.ts)"
+  },
+  "best_practices": [
+    "Strict TypeScript mode enabled",
+    "Component modularity (atomic design)",
+    "Tailwind CSS for responsive design",
+    "Lazy loading for performance",
+    "Accessibility (Aria labels) compliant"
+  ]
+}

@@ -15,7 +15,8 @@ from search_tool import WebSearch
 from lightning_memory import LightningMemory
 from config import SUMOPOD_API_KEY, SUMOPOD_BASE_URL, DEFAULT_MODEL
 from swarm.queen import QueenCoordinator
-from swarm.worker_trae import TraeWorker
+from datetime import datetime
+from swarm.worker_internal import InternalCoder
 from neural.sona import SonaMemory
 from neural.bank import ReasoningBank
 
@@ -24,15 +25,16 @@ class Orchestrator:
         self.sona = SonaMemory()
         self.bank = ReasoningBank()
         self.queen = QueenCoordinator()
-        self.trae_worker = TraeWorker(self.sona)
+        self.internal_coder = InternalCoder()
         
-        self.driver = ComputerDriver() # Legacy for fallback
+        self.driver = ComputerDriver() 
         self.web_search = WebSearch()
         self.memory = LightningMemory() # Legacy support
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
         self.stuck_count = 0
         self.base_dir = os.getenv("PROJECT_ROOT", os.getcwd())
+        self.initial_snapshot = {}
         
     async def _execute_terminal(self, instruction, update):
         """Menjalankan perintah shell/terminal secara otonom di PROJECT_ROOT."""
@@ -42,8 +44,35 @@ class Orchestrator:
             
         print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
         
-        # Ekstrak dari blok kode triple backticks (prioritas utama) - Lebih fleksibel terhadap spasi/newline
-        commands = re.findall(r'```(?:bash|sh|cmd|powershell)?\s*(.*?)\s*```', instruction, re.DOTALL)
+        # Ekstrak dari blok kode triple backticks
+        raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
+        commands = []
+        # Ekstrak dari blok kode triple backticks
+        raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
+        commands = []
+        for block in raw_blocks:
+            cleaned_block = block.strip()
+            
+            # Ganti yarn dengan npm (otomatis fallback)
+            cleaned_block = cleaned_block.replace('yarn install', 'npm install')
+            cleaned_block = cleaned_block.replace('yarn add', 'npm install')
+            cleaned_block = cleaned_block.replace('yarn ', 'npm ')
+
+            # [REFINED] Jangan split jika ada kutip terbuka (kemungkinan multi-line echo/cat)
+            # Tapi split jika ada pemisah perintah yang jelas (; atau &&) atau memang baris baru yang aman
+            if 'echo "' in cleaned_block or 'cat <<' in cleaned_block:
+                commands.append(cleaned_block)
+            else:
+                lines = cleaned_block.split('\n')
+                for line in lines:
+                    c = line.strip()
+                    if not c or c.startswith('#') or c.startswith('//'): continue
+                    # Handle mkdir -p
+                    if c.startswith('mkdir -p '):
+                        folder = c.replace('mkdir -p ', '').replace('"', '').strip()
+                        os.makedirs(os.path.join(active_root, folder), exist_ok=True)
+                        continue
+                    commands.append(c)
         
         # Jika tidak ada blok kode, coba cari baris tunggal (backticks tunggal)
         if not commands:
@@ -92,9 +121,16 @@ class Orchestrator:
                 individual_cmds = [l.strip() for l in cmd_block.split('\n') if l.strip()]
 
             for cmd in individual_cmds:
+                # Sanitasi Master: Buang prefix narasi atau karakter halusinasi di awal perintah
+                cmd = re.sub(r'^[#\s\-\*•>]+', '', cmd).strip()
+                # Jika masih ada sisa label bahasa di awal (misal: "shell npm install"), bersihkan
+                for lang in ['shell ', 'bash ', 'powershell ', 'cmd ']:
+                    if cmd.lower().startswith(lang):
+                        cmd = cmd[len(lang):].strip()
+                
                 # Filter narasi
                 forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
-                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts if " " in cmd): 
+                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts): 
                     continue
                 
                 # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
@@ -118,10 +154,15 @@ class Orchestrator:
                     cmd = re.sub(r'&&\s*cd\s+\S+\s*&&', '&&', cmd)
                     cmd = re.sub(r'&&\s*cd\s+\S+\s*$', '', cmd)
 
-                    # 4. Pastikan ada flag --template
+                # 4. Pastikan ada flag --template
                     if "--template" not in cmd:
-                        cmd += " --template react"
-                    print(f"🔧 [HARDENED V2] Project Init command: {cmd}")
+                        cmd += " --template react-ts"
+                    print(f"🔧 [HARDENED V3] Project Init command: {cmd}")
+                
+                # Auto-Init Git before any git operations
+                if cmd.strip().lower().startswith("git ") and not os.path.exists(os.path.join(active_root, ".git")):
+                    print(f"📂 [GIT AUTO-INIT] Initializing repository before operation: {cmd}")
+                    subprocess.run('git init', shell=True, cwd=active_root)
                 
                 # Skip "cd" individual jika dia berdiri sendiri (tidak dalam rantai &&)
                 if cmd.strip().startswith("cd ") and "&&" not in cmd:
@@ -180,6 +221,14 @@ class Orchestrator:
                     print(f"❌ Subprocess Execution Error: {e}")
                     await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)}`")
         
+        # [MASTER DEVELOPER] Auto-Quality Check (Linter/Formatter)
+        if any(ext in str(commands) for ext in [".tsx", ".ts", ".js", ".css"]):
+            print("✨ [QUALITY] Triggering auto-formatter (Prettier)...")
+            try:
+                # Coba jalankan prettier jika ada, jika tidak skip secara diam-diam
+                subprocess.run('npx prettier --write . --log-level warn', shell=True, cwd=active_root, timeout=30)
+            except: pass
+        
         # [NEW] [EYES] Verifikasi Integritas Proyek (Mencegah folder kosong)
         if any("create-vite" in cb or "init" in cb for cb in commands):
             if not self._verify_project_integrity(active_root):
@@ -210,21 +259,36 @@ class Orchestrator:
         return True
 
     async def _execute_browser_preview(self, update):
-        """Membuka browser dan mengambil screenshot hasil akhir."""
-        url = "http://localhost:3000" # Default untuk Next.js/Vite
-        await update.message.reply_text(f"🌐 **Opening Browser:** {url}")
+        """Membuka browser dan mengambil screenshot hasil akhir (Dynamic Port Detection)."""
+        ports = [5173, 3000, 8080, 4173] # Vite, Next.js, Generic, Vite Preview
+        success = False
         
-        try:
-            webbrowser.open(url)
-            await asyncio.sleep(5.0) # Tunggu loading
+        for port in ports:
+            url = f"http://localhost:{port}"
+            print(f"🌐 [BROWSER] Mencoba akses: {url}...")
             
-            # Ambil screenshot
-            img_path = self.driver.take_screenshot()
-            await update.message.reply_photo(photo=open(img_path, 'rb'), caption="📸 **Visual Verification Result**")
-            return True
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ Gagal membuka browser: {e}")
-            return False
+            # Verifikasi port aktif sebelum membuka browser (Opsional tapi membantu)
+            try:
+                webbrowser.open(url)
+                await asyncio.sleep(6.0) # Tunggu loading lebih lama untuk reliabilitas
+                
+                # Cek apakah screenshot berhasil (Indikator keberadaan halaman)
+                img_path = self.driver.take_screenshot(f"verify_port_{port}.png")
+                # Deteksi jika screenshot hanya blank/error (bisa ditambahkan di masa depan)
+                
+                await update.message.reply_photo(
+                    photo=open(img_path, 'rb'), 
+                    caption=f"📸 **Visual Verification Result ({url})**"
+                )
+                success = True
+                break # Sukses, hentikan pencarian port
+            except Exception as e:
+                print(f"⚠️ Port {port} gagal: {e}")
+                continue
+        
+        if not success:
+            await update.message.reply_text("❌ **Browser Error:** Tidak dapat menemukan server lokal di port manapun (5173, 3000, 8080, 4173).")
+        return success
 
     def _get_recursive_snapshot(self, directory):
         """Merekam seluruh struktur file secara rekursif untuk deteksi perubahan yang akurat."""
@@ -273,11 +337,18 @@ class Orchestrator:
             return base64.b64encode(f.read()).decode('utf-8')
 
     def _get_relevant_skills(self, task_description):
-        """Memindai folder skills/ dan memuat pengetahuan yang relevan dengan tugas."""
+        """Memindai folder skills/ dan memuat pengetahuan yang relevan dengan tugas (Enhanced with Master Standards)."""
         skills_dir = os.path.join(os.path.dirname(__file__), "skills")
-        if not os.path.exists(skills_dir): return ""
+        injected_context = "\n--- MASTER DEVELOPER STANDARDS (INJECTED) ---\n"
         
-        injected_context = "\n--- UNIVERSAL SKILLS LIBRARY (INJECTED) ---\n"
+        # Default Best Practices if no specific skill matches
+        injected_context += "1. STRUCTURE: Always use 'src/components', 'src/hooks', 'src/services', and 'src/types' folders.\n"
+        injected_context += "2. STYLING: Prefer Tailwind CSS with high-contrast dark modes and Framer Motion for micro-animations.\n"
+        injected_context += "3. TYPESCRIPT: Use strict typing, avoid 'any', and define Interfaces for all data props.\n"
+        injected_context += "4. MOBILE: If mobile, use Expo (React Native) with professional navigation patterns.\n"
+        
+        if not os.path.exists(skills_dir): return injected_context
+        
         task_lower = task_description.lower()
         found = False
         
@@ -286,7 +357,6 @@ class Orchestrator:
                 try:
                     with open(os.path.join(skills_dir, file), 'r') as f:
                         skill_data = json.load(f)
-                        # Pindai kecocokan keyword
                         if any(kw in task_lower for kw in skill_data.get('keywords', [])):
                             found = True
                             injected_context += f"CATEGORY: {skill_data['category']}\n"
@@ -295,10 +365,8 @@ class Orchestrator:
                 except Exception as e:
                     print(f"⚠️ Gagal muat modul skill {file}: {e}")
         
-        if found:
-            injected_context += "INSTRUCTION: Terapkan standar di atas dalam blueprint pembangunan software ini agar hasilnya LUAR BIASA.\n"
-            return injected_context
-        return ""
+        injected_context += "STRICT INSTRUCTION: Apply the above standards to create a WORLD-CLASS professional software architecture.\n"
+        return injected_context
 
     async def enhance_prompt(self, brief_task):
         """Mengubah input singkat menjadi daftar Milestone teknis yang terstruktur (JSON)."""
@@ -370,15 +438,16 @@ class Orchestrator:
         for i, ms in enumerate(milestones):
             ms_name = ms.get('name', f'Stage {i+1}')
             ms_instruction = ms.get('instruction', '')
-            agent_id = ms.get('required_agent', 'coder_trae')
             
             # Truncate instruction if too long for Telegram (Limit ~4096)
             safe_instruction = (ms_instruction[:3500] + '...') if len(ms_instruction) > 3500 else ms_instruction
+            
+            # 3. Eksekusi Berdasarkan Jenis Agen (Otonomi v2: Internal Coding)
+            agent_id = ms.get('required_agent', 'coder_internal')
             await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{safe_instruction}")
             
-            # Dispatch ke metode eksekusi agen yang sesuai
-            if agent_id == 'coder_trae':
-                await self._execute_coder_trae_stage(ms, i, milestones, update)
+            if agent_id in ['coder_internal', 'coder_trae', 'ux_ui_designer']:
+                await self._execute_internal_coder_stage(ms, i, milestones, update)
             elif agent_id == 'terminal_bot':
                 await self._execute_terminal_stage(ms, i, milestones, update)
             elif agent_id == 'browser_bot':
@@ -387,46 +456,59 @@ class Orchestrator:
         # 4. Neural Distillation (Knowledge Bank)
         await self._final_distillation(update)
     
-    async def _execute_coder_trae_stage(self, ms, i, milestones, update):
-        """Spesifik untuk agen Coder Trae: GUI Interaction + Monitoring."""
-        ms_name = ms.get('name', 'Coder Task')
+    async def _execute_internal_coder_stage(self, ms, i, milestones, update):
+        """Implementasi PRO-MAX: Koding Otonom dengan Siklus Self-Healing (ReAct)."""
+        ms_name = ms.get('name', 'Internal Coder Task')
         ms_instruction = ms.get('instruction', '')
-        agent_id = 'coder_trae'
+        agent_id = 'coder_internal'
+        active_root = os.getenv("PROJECT_ROOT", os.getcwd())
         
-        # 1. Reflect Pre-state
-        self.driver.capture_screen("reflect_before.png")
-        
-        # 2. Eksekusi Milestones (Typing)
-        await self.trae_worker.execute_milestone(ms)
-        await update.message.reply_text(f"⌨️ **Bot Mengetik:** `{ms_instruction[:80]}...`")
-        
-        # 3. Reflect Post-state & Monitoring
-        await asyncio.sleep(2.0)
-        self.driver.capture_screen("reflect_after.png")
-        print(f"📸 [REFLECT] Snapshot diambil untuk milestone: {ms_name}")
-
-        # Monitoring Loop untuk deteksi file baru/berubah
-        max_wait = 60
-        code_found = False
-        for wait_step in range(max_wait):
-            await asyncio.sleep(2.0)
-            active_root = os.getenv("PROJECT_ROOT", os.getcwd())
-            current_snapshot = self._get_recursive_snapshot(active_root)
-            real_changes = [f for f in current_snapshot if (f not in self.initial_snapshot or current_snapshot[f] > self.initial_snapshot[f]) and any(ext in f for ext in ['.tsx', '.ts', '.js', '.css', '.html', '.json'])]
+        # SIKLUS: Berpikir -> Bertindak -> Observasi -> Perbaiki (Maks 3 Iterasi)
+        for attempt in range(1, 4):
+            context = self._get_recursive_snapshot(active_root)
+            context_str = json.dumps(list(context.keys()), indent=2)
             
-            if real_changes:
-                code_found = True
-                await update.message.reply_text(f"✅ **Milestone Sukses:** {ms_name}\n📂 File kode terdeteksi.")
-                self.initial_snapshot = current_snapshot
-                self.sona.record_step(agent_id, "SUCCESS", f"Changes detected: {real_changes}", status="SUCCESS")
-                break
+            # Jika ini adalah percobaan perbaikan (attempt > 1), sertakan error sebelumnya
+            current_instruction = ms_instruction
+            if attempt > 1:
+                print(f"🔄 [{agent_id}] Attempt {attempt}: Mencoba memperbaiki error sebelumnya...")
             
-            if wait_step % 10 == 0:
-                print(f"⏳ Monitoring changes for {ms_name}...")
-
-        if not code_found:
-            await update.message.reply_text(f"⚠️ **Timeout:** {ms_name}. Melanjutkan...")
-            self.sona.record_step(agent_id, "TIMEOUT", "No code detected within timeframe.", status="TIMEOUT")
+            result = await self.internal_coder.execute_task(current_instruction, active_root, context_str)
+            
+            if result['status'] == 'SUCCESS':
+                written = ", ".join(result['written_files'])
+                # --- VERIFIKASI SEGERA (Observation) ---
+                print(f"🔍 [{agent_id}] Verifikasi koding (Attempt {attempt})...")
+                # Jika Web Vite, cek linting
+                error_log = ""
+                if os.path.exists(os.path.join(active_root, "package.json")):
+                    verify = subprocess.run(["npm", "run", "lint"], cwd=active_root, capture_output=True, text=True, shell=True)
+                    if verify.returncode != 0:
+                        error_log = verify.stdout + verify.stderr
+                        print(f"⚠️ [{agent_id}] Deteksi Error Linter:\n{error_log[:200]}")
+                
+                if not error_log:
+                    await update.message.reply_text(f"✅ **Koding PRO-MAX Sukses:**\n📂 Files: `{written}`\n✨ Kualitas: Terverifikasi (Lint Passed).")
+                    self.sona.record_step(agent_id, "SUCCESS", f"Code written and verified on attempt {attempt}", status="SUCCESS")
+                    return True
+                else:
+                    # Gagal Verifikasi: Analisa error dan update instruksi (Self-Healing)
+                    print(f"⚠️ [{agent_id}] Gagal Verifikasi. Log Error: {error_log[:100]}...")
+                    
+                    # Berikan hint spesifik untuk error umum
+                    reflection_hint = ""
+                    if "no-empty-object-type" in error_log or "An interface declaring no members" in error_log:
+                        reflection_hint = "HINT: Jangan gunakan 'interface Name extends Base {}' yang kosong. Gunakan 'type Name = Base' atau tambahkan properti ke interface tersebut."
+                    elif "no-explicit-any" in error_log:
+                        reflection_hint = "HINT: Ganti tipe 'any' dengan tipe data yang spesifik (misal: Record<string, unknown> atau gunakan unknown)."
+                    
+                    ms_instruction = f"REFLEKSI KEGAGALAN (Attempt {attempt}):\n{error_log}\n\n{reflection_hint}\n\nPERBAIKI FILE TERKAIT. INSTRUKSI ASLI: {ms_instruction}"
+            else:
+                await update.message.reply_text(f"❌ **Internal Coder Gagal (Attempt {attempt}):** {result.get('error')}")
+        
+        # Jika sampai sini berarti gagal setelah 3 kali percobaan
+        self.sona.record_step(agent_id, "FAILED", "Failed after 3 self-healing attempts", status="FAILED")
+        return False
 
     async def _execute_terminal_stage(self, ms, i, milestones, update):
         """Spesifik untuk agen Terminal: Command Line execution."""

@@ -1,0 +1,39 @@
+{
+    "version": "1.0.0-PRO-MAX",
+    "philosophy": {
+        "architecture": "ReAct (Reasoning-Action-Observation) Loop",
+        "development_mode": "Autonomous Master Developer",
+        "verification_loop": "Continuous Automated Testing & Linting"
+    },
+    "web_pro_max": {
+        "design_system": "shadcn/ui + Tailwind CSS v4",
+        "gen_ui_standards": "v0.dev style (Atomic Design, Custom Interactive Hooks)",
+        "animations": "Framer Motion (Staggered Children, Layout Transitions)",
+        "tokens": {
+            "glass": "bg-white/10 backdrop-blur-xl border border-white/20 shadow-xl",
+            "bento_grid": "grid grid-cols-1 md:grid-cols-4 gap-4 p-4",
+            "vibrant_hsl": "use variables for theme scalability"
+        }
+    },
+    "mobile_pro_max": {
+        "universal": {
+            "framework": "Tamagui (Web + Mobile)",
+            "features": "Universal styling, Theme customization, High performance"
+        },
+        "react_native": {
+            "ui_kit": "React Native Paper / RN Elements",
+            "standards": "Material Design 3 (M3) Spec",
+            "navigation": "React Navigation (Stack, Drawer, Tab)"
+        },
+        "flutter": {
+            "ui_kit": "GetWidget / Flutter Neumorphic",
+            "standards": "Material 3 Official",
+            "state_management": "Riverpod / GetX"
+        }
+    },
+    "coding_standards": {
+        "typescript": "Strict mode, mandatory types/interfaces, no any",
+        "react": "Functional components, custom hooks for logic separation",
+        "clean_code": "DRY, SOLID, self-documenting code"
+    }
+}

@@ -53,3 +53,21 @@ agents:
       - linting
       - bug_detection
     description: "Reviews the generated code for security vulnerabilities and logical errors before final approval."
+
+  - id: ux_ui_designer
+    role: "Visual & Experience Architect"
+    model: "gemini/gemini-2.5-flash"
+    capabilities:
+      - design_mockup
+      - theme_selection
+      - responsive_layout_design
+    description: "Ensures the application is aesthetically pleasing, high-contrast, and follows modern UI trends like Bento or Glassmorphism."
+
+  - id: devops_quality
+    role: "Deployment & Quality Engineer"
+    model: "gemini/gemini-2.5-flash"
+    capabilities:
+      - linter_execution
+      - formatter_trigger
+      - ci_cd_scaffolding
+    description: "Responsible for code formatting, directory structure integrity, and ensuring the project is production-ready."
