@@ -1,0 +1,122 @@
+{
+    "session_id": "sona_1775686535",
+    "goal": "buat landing page toko sepatu",
+    "start_time": "2026-04-09T05:16:22.720611",
+    "end_time": "2026-04-09T05:19:54.645444",
+    "verdict": "FAILED",
+    "conclusion": "Project sequence completed.",
+    "trajectory": [
+        {
+            "timestamp": "2026-04-09T05:16:28.843813",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:16:31.115325",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:16:34.328813",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:16:58.398802",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:17:28.332194",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:17:57.018043",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:18:25.699176",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:18:46.255078",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:18:59.679328",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:19:17.383194",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:19:34.081196",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:19:37.062665",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:19:43.173311",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:19:54.644765",
+            "agent": "browser_bot",
+            "action": "SUCCESS",
+            "observation": "Browser preview captured.",
+            "thought": "",
+            "status": "SUCCESS"
+        }
+    ]
+}

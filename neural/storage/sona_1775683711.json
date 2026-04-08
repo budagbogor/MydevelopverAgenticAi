@@ -1,0 +1,114 @@
+{
+    "session_id": "sona_1775683711",
+    "goal": "hendrawan md:\n/new_folder 99iki\n\nbuatkan landing page toko sepeda gunung",
+    "start_time": "2026-04-09T04:30:23.705783",
+    "end_time": "2026-04-09T04:31:20.970832",
+    "verdict": "SUCCESS",
+    "conclusion": "Project sequence completed.",
+    "trajectory": [
+        {
+            "timestamp": "2026-04-09T04:30:24.126064",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:24.535269",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:24.908059",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:36.080845",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:48.612025",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 2",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:48.975519",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:30:55.719098",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:00.711895",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:07.589003",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:10.974004",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:11.372437",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:11.737279",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T04:31:20.970373",
+            "agent": "browser_bot",
+            "action": "SUCCESS",
+            "observation": "Browser preview captured.",
+            "thought": "",
+            "status": "SUCCESS"
+        }
+    ]
+}

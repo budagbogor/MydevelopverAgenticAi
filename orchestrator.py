@@ -33,6 +33,8 @@ class Orchestrator:
         self.client = OpenAI(api_key=SUMOPOD_API_KEY, base_url=SUMOPOD_BASE_URL)
         self.history = []
         self.stuck_count = 0
+        self.no_action_count = 0  # [NEW] Untuk Loop Breaker
+        self.last_visual_hash = "" # [NEW] Deteksi stagnasi
         self.base_dir = os.getenv("PROJECT_ROOT", os.getcwd())
         self.initial_snapshot = {}
         
@@ -44,217 +46,174 @@ class Orchestrator:
             
         print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
         
-        # Ekstrak dari blok kode triple backticks
+        # Ekstrak blok kode triple backticks
         raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
-        commands = []
-        # Ekstrak dari blok kode triple backticks
-        raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
-        commands = []
+        if not raw_blocks:
+            # Fallback ke backticks tunggal
+            raw_blocks = re.findall(r'`([^`\n]+)`', instruction)
+        
+        if not raw_blocks:
+            print(f"⚠️ [TERMINAL] No executable commands found. Skipping.")
+            return True
+
         for block in raw_blocks:
-            cleaned_block = block.strip()
+            lines = block.strip().split('\n')
             
-            # Ganti yarn dengan npm (otomatis fallback)
-            cleaned_block = cleaned_block.replace('yarn install', 'npm install')
-            cleaned_block = cleaned_block.replace('yarn add', 'npm install')
-            cleaned_block = cleaned_block.replace('yarn ', 'npm ')
-
-            # [REFINED] Jangan split jika ada kutip terbuka (kemungkinan multi-line echo/cat)
-            # Tapi split jika ada pemisah perintah yang jelas (; atau &&) atau memang baris baru yang aman
-            if 'echo "' in cleaned_block or 'cat <<' in cleaned_block:
-                commands.append(cleaned_block)
-            else:
-                lines = cleaned_block.split('\n')
-                for line in lines:
-                    c = line.strip()
-                    if not c or c.startswith('#') or c.startswith('//'): continue
-                    # Handle mkdir -p
-                    if c.startswith('mkdir -p '):
-                        folder = c.replace('mkdir -p ', '').replace('"', '').strip()
-                        os.makedirs(os.path.join(active_root, folder), exist_ok=True)
-                        continue
-                    commands.append(c)
-        
-        # Jika tidak ada blok kode, coba cari baris tunggal (backticks tunggal)
-        if not commands:
-            commands = re.findall(r'`([^`\n]+)`', instruction)
+            in_cat_block = False
+            cat_filename = ""
+            cat_content = []
             
-        print(f"DEBUG: Found commands: {commands}")
-        
-        # [NEW] Pre-processing: Bersihkan perintah dari Queen agar selalu non-interaktif
-        processed_commands = []
-        for cmd_block in commands:
-            # Ganti npm create vite atau variasi lainnya dengan npx create-vite@latest ./ --no-interactive
-            # Regex ini menangkap create-vite([@latest]?) [nama_folder] dan menggantinya
-            cmd_block = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite)(?:\s+)?(\S+)?', 
-                               r'\1create-vite@latest ./ --no-interactive ', cmd_block)
-            
-            # Pastikan flag --template ada jika belum ada
-            if "create-vite" in cmd_block and "--template" not in cmd_block:
-                cmd_block += " --template react-ts"
+            for line in lines:
+                line_clean = line.strip()
+                if not line_clean: continue
                 
-            processed_commands.append(cmd_block)
-        
-        commands = processed_commands
+                # [STATE] SEDANG DALAM BLOK CAT
+                if in_cat_block:
+                    if line_clean.upper() == "EOF":
+                        # Selesai, tulis file
+                        filepath = os.path.join(active_root, cat_filename)
+                        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write("\n".join(cat_content))
+                        print(f"🛡️ [INTERCEPT] File created via Line-Logic: {cat_filename}")
+                        in_cat_block = False
+                    else:
+                        cat_content.append(line)
+                    continue
 
-        # Jika masih tidak ada, coba cari perintah berbasis kata kunci (Penyelamat jika Queen lalai)
-        if not commands:
-            lines = instruction.split('\n')
-            tech_keywords = ["npm ", "npx ", "git ", "mkdir ", "touch ", "cd "]
-            potential_cmds = [line.strip() for line in lines if any(line.strip().lower().startswith(kw) for kw in tech_keywords)]
-            if potential_cmds:
-                print(f"🪄 [TERMINAL] Magic Extraction: Ditemukan {len(potential_cmds)} perintah tanpa backticks.")
-                commands = ["\n".join(potential_cmds)]
+                # [DETEKSI] AWAL BLOK CAT
+                cat_start_match = re.search(r'cat\s+<<EOF\s+>\s+([\w\.\-/\\]+)', line_clean, re.IGNORECASE)
+                if cat_start_match:
+                    in_cat_block = True
+                    # Tangani path dengan backslash atau forward slash
+                    cat_filename = cat_start_match.group(1).replace('\\', '/').strip()
+                    cat_content = []
+                    continue
 
-        # Jika TETAP tidak ada, JANGAN jalankan instruksi narasi (hindari error 'Buat proyek...')
-        if not commands:
-            print(f"⚠️ [TERMINAL] No executable commands found in instruction. Skipping narrative text.")
-            await update.message.reply_text("⚠️ **Terminal Warning:** Instruksi ini berupa narasi dan tidak mengandung blok kode perintah. Melewati...")
-            return False
+                # [DETEKSI] ECHO > FILE
+                echo_match = re.search(r'echo\s+["\']?(.*?)["\']?\s+>\s+([\w\.\-/\\]+)', line_clean, re.IGNORECASE)
+                if echo_match:
+                    content, filename = echo_match.groups()
+                    filepath = os.path.join(active_root, filename.replace('\\', '/').strip())
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(content.strip())
+                    print(f"🛡️ [INTERCEPT] File created via Echo-Logic: {filename}")
+                    continue
 
-        print(f"DEBUG: Executing commands: {commands}")
-        for cmd_block in commands:
-            # INTEGRITY FIX: Gabungkan perintah berantai jika mengandung inisialisasi
-            # Hal ini penting agar 'cd project && npm install' berjalan dalam satu sub-proses shell.
-            if "&&" in cmd_block:
-                individual_cmds = [cmd_block.strip()]
-            else:
-                individual_cmds = [l.strip() for l in cmd_block.split('\n') if l.strip()]
+                # [DETEKSI] MKDIR
+                if line_clean.lower().startswith('mkdir '):
+                    folder = line_clean.replace('mkdir -p ', '').replace('mkdir ', '').replace('"', '').strip()
+                    folders = [f.strip() for f in folder.split(' ') if f.strip()]
+                    for f_path in folders:
+                        if f_path:
+                            # Paksa os.makedirs untuk setiap folder bertingkat
+                            os.makedirs(os.path.join(active_root, f_path.replace('\\', '/')), exist_ok=True)
+                    print(f"🛡️ [INTERNAL] Folders created: {folder}")
+                    continue
 
-            for cmd in individual_cmds:
-                # Sanitasi Master: Buang prefix narasi atau karakter halusinasi di awal perintah
-                cmd = re.sub(r'^[#\s\-\*•>]+', '', cmd).strip()
-                # Jika masih ada sisa label bahasa di awal (misal: "shell npm install"), bersihkan
+                # [DEFAULT] EKSEKUSI SHELL
+                # Saring komentar & instruksi narasi
+                if line_clean.startswith('#') or any(line_clean.lower().startswith(f) for f in ["buat", "isi file"]):
+                    continue
+
+                # Modifikasi agar non-interaktif
+                cmd = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
+                             r'\1\2 --no-interactive ', line_clean)
+                
+                # Cleanup language labels (e.g. "bash npm install")
                 for lang in ['shell ', 'bash ', 'powershell ', 'cmd ']:
-                    if cmd.lower().startswith(lang):
-                        cmd = cmd[len(lang):].strip()
-                
-                # Filter narasi
-                forbidden_starts = ["buat", "jalankan", "hentikan", "create", "stop", "masuk ke"]
-                if not cmd or cmd.startswith('#') or any(cmd.lower().startswith(f) for f in forbidden_starts): 
-                    continue
-                
-                # Fix: Jika "npm create vite ... [nama]", ganti nama folder jadi "./" agar init di folder saat ini
-                if "create-vite" in cmd or "create vite" in cmd:
-                    # 1. Pastikan npx -y dan --no-interactive digunakan agar tidak ada prompt apapun
-                    if "npx " in cmd and "-y" not in cmd:
-                        cmd = cmd.replace("npx ", "npx -y ")
-                    elif "npm create" in cmd:
-                         cmd = cmd.replace("npm create", "npx -y create")
-                    
-                    if "--no-interactive" not in cmd:
-                        cmd = cmd.replace("create-vite ", "create-vite@latest ./ --no-interactive ")
-                        cmd = cmd.replace("create vite ", "create-vite@latest ./ --no-interactive ")
-                    
-                    # 2. Bersihkan nama proyek dari argumen: ganti nama folder yang diberikan dengan './'
-                    # Contoh: npx create-vite my-app -> npx create-vite ./
-                    cmd = re.sub(r'(create-vite@latest\s+)(\S+)', r'\1./', cmd)
-                    
-                    # 3. Clean-up chained 'cd' commands: Jika ada '&& cd [nama_proyek]', buang bagian cd-nya
-                    # Karena kita sudah memaksa instalasi di './'
-                    cmd = re.sub(r'&&\s*cd\s+\S+\s*&&', '&&', cmd)
-                    cmd = re.sub(r'&&\s*cd\s+\S+\s*$', '', cmd)
+                    if cmd.lower().startswith(lang): cmd = cmd[len(lang):].strip()
 
-                # 4. Pastikan ada flag --template
-                    if "--template" not in cmd:
-                        cmd += " --template react-ts"
-                    print(f"🔧 [HARDENED V3] Project Init command: {cmd}")
+                # [HOTFIX 2.15] Terminal Path Guard: Hapus instruksi 'cd' manual yang rawan halusinasi
+                # Kita selalu menggunakan active_root sebagai CWD yang sah.
+                clean_cmd = re.sub(r'cd\s+[^\n&|;]+[&|;]*', '', cmd).strip()
+                if not clean_cmd: continue # Abaikan jika hanya berisi perintah cd
                 
-                # Auto-Init Git before any git operations
-                if cmd.strip().lower().startswith("git ") and not os.path.exists(os.path.join(active_root, ".git")):
-                    print(f"📂 [GIT AUTO-INIT] Initializing repository before operation: {cmd}")
-                    subprocess.run('git init', shell=True, cwd=active_root)
-                
-                # Skip "cd" individual jika dia berdiri sendiri (tidak dalam rantai &&)
-                if cmd.strip().startswith("cd ") and "&&" not in cmd:
-                    print(f"⏭️ Skipping standalone cd: {cmd}")
-                    continue
+                # [VELOCITY] Adaptive Timeout based on command type
+                timeout_val = 300 # Default (install/build)
+                if any(x in clean_cmd.lower() for x in ["mkdir", "git", "touch", "ls", "dir", "cat"]):
+                    timeout_val = 30
+                elif "npx init" in clean_cmd.lower():
+                    timeout_val = 120
 
-                await update.message.reply_text(f"📟 **Executing:** `{cmd[:120]}`")
+                print(f"📟 [TERMINAL] Target: {active_root} | Executing: {clean_cmd}")
+                
+                is_server = any(x in clean_cmd.lower() for x in ["run dev", "run start", "vite", "next dev"])
+                
                 try:
-                    # DETEKSI PERINTAH SERVER (NON-BLOCKING)
-                    is_server = any(x in cmd.lower() for x in ["run dev", "run start", "vite", "next dev"])
-                    
                     process = await asyncio.create_subprocess_shell(
-                        cmd,
+                        clean_cmd,
                         cwd=active_root,
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                        stderr=asyncio.subprocess.PIPE,
                     )
                     
                     if is_server:
-                        print(f"🚀 [SERVER] Menjalankan dev server di background: {cmd}")
-                        await update.message.reply_text("🚀 **Server Detected:** Menjalankan di background. Melanjutkan misi...")
-                        # Beri waktu 5s untuk inisialisasi server sebelum lanjut
-                        await asyncio.sleep(5.0)
-                        # Kita tidak melakukan wait_for(process.communicate()) karena ini server
+                        print(f"🚀 [SERVER] Background: {clean_cmd}")
+                        await update.message.reply_text("🚀 **Server Started:** Waiting for warm-up...")
+                        await asyncio.sleep(5.0) 
                         continue
 
-                    # TIMEOUT 300 detik untuk perintah normal (install/build)
                     try:
-                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_val)
                         
-                        # Settling Delay: Jika ini perintah init proyek, tunggu agar file stabil di disk
-                        if any(x in cmd for x in ["create-", "npx ", "init"]):
-                            print("⏳ Settling Delay: Menunggu file sistem (5s)...")
-                            await asyncio.sleep(5)
-                            
-                            # Jalankan git init jika folder belum merupakan repository git
-                            if not os.path.exists(os.path.join(active_root, ".git")):
-                                print(f"📂 [GIT] Initializing new repository in {active_root}...")
-                                os.system(f'cd /d "{active_root}" && git init')
-                            
                         if process.returncode == 0:
-                            output = stdout.decode().strip()
-                            if output:
-                                print(f"✅ Output: {output[:200]}...")
-                                await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
+                            print(f"✅ OK: {cmd[:50]}")
+                            await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
                         else:
                             error = stderr.decode().strip()
-                            print(f"⚠️ Terminal Error: {error[:200]}")
-                            await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:200]}`")
+                            print(f"⚠️ Warning: {error[:150]}")
+                            await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:150]}`")
                             
                     except asyncio.TimeoutError:
-                        process.kill()
-                        await update.message.reply_text(f"⏰ **Timeout:** `{cmd}` terlalu lama (>300s). Melanjutkan...")
-                        
+                        process.terminate()
+                        print(f"⏰ [VELOCITY] Stuck Detection: {cmd[:30]} timed out.")
+                        await update.message.reply_text(f"⏰ **Velocity Timeout:** `{cmd[:50]}`. Auto-recovering...")
+                    except Exception as e:
+                        print(f"❌ Execution Error: {e}")
+                        await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)[:100]}`")
+                
+                    # [HOTFIX 2.12] Neural Terminal Auditor: Membaca Output untuk Self-Healing
+                    if stdout or stderr:
+                        out_text = (stdout.decode() if stdout else "") + (stderr.decode() if stderr else "")
+                        if "npm ERR!" in out_text or "node_modules" in out_text.lower() and "not found" in out_text.lower():
+                            print("🧠 [NEURAL AUDITOR] Mendeteksi masalah dependensi. Menjalankan Self-Healing...")
+                            await update.message.reply_text("🧠 **Neural Auditor:** Mendeteksi masalah dependensi. Memperbaiki otomatis...")
+                            # Menjadwalkan pengerjaan ulang terminal secara cerdas
+                            milestones.insert(i + 1, {"name": "Self-Healing: npm install", "instruction": "```bash\nnpm install\n```", "required_agent": "terminal_bot"})
+                        elif "EADDRINUSE" in out_text:
+                            await update.message.reply_text("🧠 **Neural Auditor:** Port terpakai. Mencoba membebaskan port...")
+                            milestones.insert(i + 1, {"name": "Self-Healing: Clear Port", "instruction": "```bash\nnpx kill-port 5173\n```", "required_agent": "terminal_bot"})
                 except Exception as e:
-                    print(f"❌ Subprocess Execution Error: {e}")
-                    await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)}`")
-        
-        # [MASTER DEVELOPER] Auto-Quality Check (Linter/Formatter)
-        if any(ext in str(commands) for ext in [".tsx", ".ts", ".js", ".css"]):
-            print("✨ [QUALITY] Triggering auto-formatter (Prettier)...")
-            try:
-                # Coba jalankan prettier jika ada, jika tidak skip secara diam-diam
-                subprocess.run('npx prettier --write . --log-level warn', shell=True, cwd=active_root, timeout=30)
-            except: pass
-        
-        # [NEW] [EYES] Verifikasi Integritas Proyek (Mencegah folder kosong)
-        if any("create-vite" in cb or "init" in cb for cb in commands):
-            if not self._verify_project_integrity(active_root):
-                await update.message.reply_text("⛔ **Integrity Error:** Project init gagal (folder kosong). Membatalkan sisa misi.")
-                return False
+                    print(f"❌ Critical Shell Error: {e}")
+                    await update.message.reply_text(f"❌ **Shell Error:** {e}")
         
         return True
 
-    def _verify_project_integrity(self, path):
-        """Memastikan folder proyek berisi file scaffold Vite yang valid."""
+    async def _verify_project_integrity(self, path, update):
+        """Memastikan folder proyek memiliki dependensi dan file scaffold yang lengkap."""
+        print(f"🔍 [INTEGRITY] Guarding path: {path}")
+        
+        # 1. Cek Folder Dasar
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            
+        # 2. Cek node_modules (Kritis untuk Localhost)
+        node_modules_path = os.path.join(path, "node_modules")
+        if not os.path.exists(node_modules_path):
+            print("🚨 [INTEGRITY FAIL] node_modules tidak ditemukan. Menjadwalkan instalasi paksa...")
+            await update.message.reply_text("🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Memulai instalasi paksa...")
+            return False # Membutuhkan instalasi baru
+            
+        # 3. Cek file scaffold Vite
         critical_files = ["package.json", "index.html"]
         found_files = os.listdir(path)
-        print(f"🔍 [INTEGRITY] Checking {path}... Found: {found_files}")
-        
         for f in critical_files:
             if f not in found_files:
+                print(f"🚨 [INTEGRITY FAIL] File {f} hilang.")
                 return False
-        
-        # Cek apakah package.json berisi scripts dev (bukan file kosong)
-        try:
-            with open(os.path.join(path, "package.json"), "r") as f:
-                data = json.load(f)
-                if "scripts" not in data or "dev" not in data["scripts"]:
-                    return False
-        except:
-            return False
+        return True
             
         return True
 
@@ -262,29 +221,37 @@ class Orchestrator:
         """Membuka browser dan mengambil screenshot hasil akhir (Dynamic Port Detection)."""
         ports = [5173, 3000, 8080, 4173] # Vite, Next.js, Generic, Vite Preview
         success = False
-        
         for port in ports:
             url = f"http://localhost:{port}"
-            print(f"🌐 [BROWSER] Mencoba akses: {url}...")
+            # [HOTFIX 2.8] Warm-up Retry Logic untuk Localhost
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    print(f"🌐 [BROWSER] Accessing {url} (Attempt {attempt+1}/{max_retries})...")
+                    webbrowser.open(url)
+                    await asyncio.sleep(8.0) # Jeda loading halaman
+                    
+                    img_path = self.driver.take_screenshot(f"verify_port_{port}.png")
+                    
+                    await update.message.reply_photo(
+                        photo=open(img_path, 'rb'), 
+                        caption=f"📸 **Visual Verification Result ({url})**"
+                    )
+                    success = True
+                    break 
+                except Exception as e:
+                    print(f"⚠️ Attempt {attempt+1} failed for port {port}: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(8.0) # Tunggu lebih lama
+                    else:
+                        # [HOTFIX 2.11] Visual Self-Healing: Jika tetap gagal, suruh bot lain perbaiki
+                        print("🚨 [VISUAL SELF-HEALING] Browser tetap gagal. Memicu rencana perbaikan...")
+                        await update.message.reply_text("🚨 **Visual Self-Healing:** Localhost mati. Mencoba menghidupkan ulang server...")
+                        # Tambahkan Milestone baru di antrean untuk menyalakan server ulang
+                        return "trigger_server_restart"
+                    continue
             
-            # Verifikasi port aktif sebelum membuka browser (Opsional tapi membantu)
-            try:
-                webbrowser.open(url)
-                await asyncio.sleep(6.0) # Tunggu loading lebih lama untuk reliabilitas
-                
-                # Cek apakah screenshot berhasil (Indikator keberadaan halaman)
-                img_path = self.driver.take_screenshot(f"verify_port_{port}.png")
-                # Deteksi jika screenshot hanya blank/error (bisa ditambahkan di masa depan)
-                
-                await update.message.reply_photo(
-                    photo=open(img_path, 'rb'), 
-                    caption=f"📸 **Visual Verification Result ({url})**"
-                )
-                success = True
-                break # Sukses, hentikan pencarian port
-            except Exception as e:
-                print(f"⚠️ Port {port} gagal: {e}")
-                continue
+            if success: break
         
         if not success:
             await update.message.reply_text("❌ **Browser Error:** Tidak dapat menemukan server lokal di port manapun (5173, 3000, 8080, 4173).")
@@ -317,16 +284,18 @@ class Orchestrator:
         try:
             img = Image.open(image_path).convert('RGB')
             w, h = img.size
-            # --- HIGH FIDELITY (0.6 Scale) ---
-            img = img.resize((int(w * 0.6), int(h * 0.6)), Image.LANCZOS)
+            # [VISION TURBO] Scale down to 0.4 for faster processing & upload
+            img = img.resize((int(w * 0.4), int(h * 0.4)), Image.LANCZOS)
             w, h = img.size
             draw = ImageDraw.Draw(img)
             for i in range(0, 101, 20):
                 x, y = (i / 100) * w, (i / 100) * h
                 draw.line([(x, 0), (x, h)], fill=(128, 128, 128, 128), width=1)
                 draw.line([(0, y), (w, y)], fill=(128, 128, 128, 128), width=1)
-            grid_path = image_path.replace(".png", "_optimized.jpg")
-            img.save(grid_path, "JPEG", quality=80, optimize=True)
+            
+            grid_path = image_path.replace(".png", "_turbo.jpg")
+            # [VISION TURBO] aggressive compression (65) for instant transmission
+            img.save(grid_path, "JPEG", quality=65, optimize=True)
             return grid_path
         except Exception as e:
             print(f"⚠️ Gagal optimasi vision: {e}")
@@ -434,7 +403,20 @@ class Orchestrator:
         current_root = os.getenv("PROJECT_ROOT", os.getcwd())
         self.initial_snapshot = self._get_recursive_snapshot(current_root)
         
-        # 3. Eksekusi Swarm melalui Workers
+        # 3. Health Check & Integrity (Hotfix 2.14)
+        integrity_passed = await self._verify_project_integrity(current_root, update)
+        if not integrity_passed:
+            print("🛠️ [RECOVERY] Memperbaiki integritas proyek yang rusak...")
+            # Suntikkan Milestone Inisialisasi secara paksa di urutan pertama
+            recovery_milestone = {
+                "id": 0,
+                "name": "Emergency Project Recovery",
+                "instruction": "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```",
+                "required_agent": "terminal_bot"
+            }
+            milestones.insert(0, recovery_milestone)
+
+        # 4. Eksekusi Swarm melalui Workers
         for i, ms in enumerate(milestones):
             ms_name = ms.get('name', f'Stage {i+1}')
             ms_instruction = ms.get('instruction', '')
@@ -474,6 +456,22 @@ class Orchestrator:
                 print(f"🔄 [{agent_id}] Attempt {attempt}: Mencoba memperbaiki error sebelumnya...")
             
             result = await self.internal_coder.execute_task(current_instruction, active_root, context_str)
+            
+            # [HOTFIX 2.6] VITALITY GUARD: Deteksi Respon Kosong/Melamun
+            if not result or (not result.get('written_files') and result.get('status') == 'SUCCESS'):
+                self.no_action_count += 1
+                print(f"⚠️ [LOOP BREAKER] Agen memberikan respon kosong (Count: {self.no_action_count}/3)")
+                if self.no_action_count >= 3:
+                    print("🚨 [VITALITY GUARD] Memicu Emergency Refresh...")
+                    await update.message.reply_text("🚨 **Vitality Guard:** Saya merasa stuck dalam pemikiran. Mencoba menyegarkan sistem...")
+                    self.driver.press_key("esc")
+                    await asyncio.sleep(1.0)
+                    self.no_action_count = 0 # Reset
+                    # Ambil screenshot baru sebagai trigger vision baru
+                    self.driver.take_screenshot("emergency_refresh.png")
+                    continue
+            else:
+                self.no_action_count = 0 # Reset jika ada aksi nyata
             
             if result['status'] == 'SUCCESS':
                 written = ", ".join(result['written_files'])

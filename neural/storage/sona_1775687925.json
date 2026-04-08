@@ -1,0 +1,114 @@
+{
+    "session_id": "sona_1775687925",
+    "goal": "buatkan landing page toko sepatu olahraga",
+    "start_time": "2026-04-09T05:39:31.470127",
+    "end_time": "2026-04-09T05:43:18.466094",
+    "verdict": "FAILED",
+    "conclusion": "Project sequence completed.",
+    "trajectory": [
+        {
+            "timestamp": "2026-04-09T05:39:39.728079",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:39:45.475283",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:39:46.574864",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:39:49.778447",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:41:02.117537",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:41:24.810344",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:41:50.048026",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:42:23.142430",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:42:43.792524",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:42:58.612716",
+            "agent": "coder_internal",
+            "action": "FAILED",
+            "observation": "Failed after 3 self-healing attempts",
+            "thought": "",
+            "status": "FAILED"
+        },
+        {
+            "timestamp": "2026-04-09T05:43:01.208227",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:43:06.963030",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-09T05:43:18.463775",
+            "agent": "browser_bot",
+            "action": "SUCCESS",
+            "observation": "Browser preview captured.",
+            "thought": "",
+            "status": "SUCCESS"
+        }
+    ]
+}

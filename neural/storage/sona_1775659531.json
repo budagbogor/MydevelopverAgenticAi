@@ -1,0 +1,114 @@
+{
+    "session_id": "sona_1775659531",
+    "goal": "buat web aplikasi toko bangunan",
+    "start_time": "2026-04-08T21:46:43.731744",
+    "end_time": "2026-04-08T21:47:35.430129",
+    "verdict": "SUCCESS",
+    "conclusion": "Project sequence completed.",
+    "trajectory": [
+        {
+            "timestamp": "2026-04-08T21:46:45.670900",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:46.828346",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:47.214644",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:49.163634",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:53.566225",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:55.417556",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:46:56.534210",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:02.278981",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:18.658582",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:23.840109",
+            "agent": "coder_internal",
+            "action": "SUCCESS",
+            "observation": "Code written and verified on attempt 1",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:24.953761",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:26.239796",
+            "agent": "terminal_bot",
+            "action": "SUCCESS",
+            "observation": "Terminal commands executed.",
+            "thought": "",
+            "status": "SUCCESS"
+        },
+        {
+            "timestamp": "2026-04-08T21:47:35.429485",
+            "agent": "browser_bot",
+            "action": "SUCCESS",
+            "observation": "Browser preview captured.",
+            "thought": "",
+            "status": "SUCCESS"
+        }
+    ]
+}

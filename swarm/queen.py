@@ -63,7 +63,7 @@ class QueenCoordinator:
                 {{
                     "id": 1,
                     "name": "Nama Milestone",
-                    "instruction": "Blok kode terminal atau instruksi koding detail.",
+                    "instruction": "Pastikan setiap Milestone memiliki daftar instruksi yang JELAS untuk agen koding (internal_coder) atau agen terminal (terminal_bot). ATURAN KRITIS WINDOWS: 1. DILARANG menggunakan terminal_bot untuk menulis konten file (seperti echo > atau cat <<EOF). Setiap pembuatan atau modifikasi konten file WAJIB dilakukan oleh internal_coder. 2. terminal_bot hanya digunakan untuk: npm install, npx init, git, dan manajemen proses. 3. Hapus semua file boilerplate (Clean Slate) sebelum mulai koding profesional.",
                     "required_agent": "terminal_bot" | "coder_internal" | "browser_bot",
                     "is_critical": true
                 }}
@@ -73,7 +73,7 @@ class QueenCoordinator:
         
         try:
             response = self.client.chat.completions.create(
-                model="gemini/gemini-2.5-pro", # Use high reasoning model
+                model=DEFAULT_MODEL, # Use stable model from config
                 messages=[
                     {"role": "system", "content": "You are the Queen Coordinator. Break down complex missions into precise milestones."},
                     {"role": "user", "content": prompt}
@@ -83,7 +83,36 @@ class QueenCoordinator:
             return json.loads(response.choices[0].message.content)
         except Exception as e:
             print(f"⚠️ Queen failed to decompose: {e}")
-            return {"strategy": "Linear fallback", "milestones": [{"id": 1, "name": "Main Execution", "instruction": user_task, "required_agent": "coder_trae"}]}
+            # [HOTFIX 2.10] Rich Fallback: Pastikan instalasi & server selalu ada
+            return {
+                "strategy": "Recovery fallback (Complete Cycle)", 
+                "milestones": [
+                    {
+                        "id": 1, 
+                        "name": "Project Initialization", 
+                        "instruction": "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```", 
+                        "required_agent": "terminal_bot"
+                    },
+                    {
+                        "id": 2, 
+                        "name": "Main Execution", 
+                        "instruction": user_task, 
+                        "required_agent": "coder_internal"
+                    },
+                    {
+                        "id": 3, 
+                        "name": "Launch Server", 
+                        "instruction": "```bash\nnpm run dev\n```", 
+                        "required_agent": "terminal_bot"
+                    },
+                    {
+                        "id": 4, 
+                        "name": "Visual Check", 
+                        "instruction": "Buka localhost:5173", 
+                        "required_agent": "browser_bot"
+                    }
+                ]
+            }
 
     async def orchestrate(self, user_task, update_callback=None):
         """

@@ -61,37 +61,60 @@ class InternalCoder:
         """
 
         try:
+            # Gunakan model yang paling cerdas untuk koding
             response = self.client.chat.completions.create(
-                model="gemini/gemini-2.0-flash", # Cepat dan akurat untuk koding
+                model=DEFAULT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a professional full-stack developer who writes files directly to disk."},
+                    {"role": "system", "content": "You are a professional developer. Provide your response as a series of code blocks. Each block MUST be preceded by a line with the file path, like this: \n\nFILE: src/App.tsx\n```tsx\n// code\n```"},
                     {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
+                ]
             )
             
-            result = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
             written_files = []
             
-            # Eksekusi penulisan file
-            for file_data in result.get('files', []):
-                path_relative = file_data.get('path')
-                content = file_data.get('content')
+            # [HOTFIX 2.17] Fiber-Optic Extraction: Ekstrak file dan konten menggunakan Regex
+            # Pola: Mencari "FILE: path" diikuti oleh blok markdown
+            file_blocks = re.findall(r'FILE:\s*([^\s\n]+)[\s\n]*```[a-z]*\n(.*?)\n```', raw_content, re.DOTALL)
+            
+            # Jika Regex gagal, coba fallback ke JSON mode yang sudah disanitasi
+            if not file_blocks:
+                try:
+                    clean_content = re.sub(r'^```json\s*', '', raw_content.strip())
+                    clean_content = re.sub(r'\s*```$', '', clean_content)
+                    data = json.loads(clean_content)
+                    for f in data.get('files', []):
+                        file_blocks.append((f['path'], f['content']))
+                except:
+                    pass
+
+            if not file_blocks:
+                raise ValueError("Gagal mengekstrak blok kode valid dari respon AI.")
+
+            for path_relative, content in file_blocks:
+                path_absolute = os.path.join(active_root, path_relative)
                 
-                if path_relative and content:
-                    # Gabungkan dengan active_root agar tertulis ke folder proyek yang benar
-                    path_absolute = os.path.join(active_root, path_relative)
-                    
-                    # Pastikan direktori ada
-                    dir_name = os.path.dirname(path_absolute)
-                    if dir_name and not os.path.exists(dir_name):
-                        os.makedirs(dir_name, exist_ok=True)
-                    
-                    with open(path_absolute, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    
-                    written_files.append(path_relative)
-                    print(f"✅ [{self.agent_id}] File written: {path_absolute}")
+                # Pastikan direktori ada
+                dir_name = os.path.dirname(path_absolute)
+                if dir_name and not os.path.exists(dir_name):
+                    os.makedirs(dir_name, exist_ok=True)
+                
+                with open(path_absolute, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                written_files.append(path_relative)
+                print(f"✅ [{self.agent_id}] Extracted & Written: {path_absolute}")
+
+            return {
+                "status": "SUCCESS",
+                "written_files": written_files,
+                "summary": f"Otonomi Sukses: Menulis {len(written_files)} file melalui jalur Fiber-Optic."
+            }
+
+        except Exception as e:
+            # [HOTFIX 2.17] Silent Fail: Jangan membanjiri log internal dengan detail teknis JSON
+            print(f"⚠️ [{self.agent_id}] Silent Retry Triggered: {e}")
+            return {"status": "FAILED", "error": "AI Response Format Invalid. Retrying silently..."}
 
             return {
                 "status": "SUCCESS",

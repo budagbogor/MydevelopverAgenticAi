@@ -38,6 +38,45 @@
                 "component structure",
                 "CSS Grid"
             ]
+        },
+        {
+            "title": "Web App Development for Building Supply Store",
+            "category": "pattern",
+            "summary": "The agent successfully developed a web application for a building supply store by iteratively writing and verifying code using internal coder agents and terminal bot agents, culminating in a browser preview.",
+            "distillation": "For building similar web applications, utilize a process of iterative coding and verification, leveraging internal coder agents for code generation and terminal bots for execution of commands; ensure a browser preview is captured to confirm successful deployment and functionality.",
+            "keywords": [
+                "web application",
+                "iterative development",
+                "code verification",
+                "terminal commands",
+                "browser preview"
+            ]
+        },
+        {
+            "title": "Successful landing page creation for a mountain bike shop.",
+            "category": "pattern",
+            "summary": "The agent successfully created a landing page for a mountain bike shop by creating a new folder, writing and verifying code multiple times, and capturing a browser preview.",
+            "distillation": "When creating landing pages, use the following process: create a new directory for the project, iterate on code development and verification, and finally, preview the page in a browser to ensure it meets requirements. Leverage internal coder agents and terminal bots to streamline development.",
+            "keywords": [
+                "landing page",
+                "code verification",
+                "browser preview",
+                "coder agent",
+                "terminal bot"
+            ]
+        },
+        {
+            "title": "Successful Landing Page Generation",
+            "category": "pattern",
+            "summary": "The agent successfully generated a landing page for an athletic shoe store on the first attempt.",
+            "distillation": "This indicates a robust and reliable coding process for creating landing pages, especially in the e-commerce domain, suggesting a potentially reusable code template or a highly effective prompt engineering strategy.",
+            "keywords": [
+                "landing page",
+                "e-commerce",
+                "code generation",
+                "success",
+                "first attempt"
+            ]
         }
     ],
     "resolved_errors": [
@@ -52,6 +91,32 @@
                 "task complexity",
                 "resource allocation",
                 "UI development"
+            ]
+        },
+        {
+            "title": "Coder Internal Repeated Failures",
+            "category": "error_resolution",
+            "summary": "The coder_internal agent repeatedly failed to generate the landing page code, even after multiple self-healing attempts, leading to project failure.",
+            "distillation": "When the coder_internal agent fails repeatedly (e.g., more than 3 times) on a coding task despite self-healing, escalate to a different strategy, such as using a different coding approach or assigning the task to a human coder, rather than continuing with the same failing method.",
+            "keywords": [
+                "coder_internal",
+                "failure",
+                "self-healing",
+                "error resolution",
+                "escalation"
+            ]
+        },
+        {
+            "title": "Coder Internal consistently fails after initial success.",
+            "category": "error_resolution",
+            "summary": "The coder_internal agent initially succeeds in writing code but then fails repeatedly with self-healing attempts, indicating a potential issue with code stability or environmental dependencies.",
+            "distillation": "Investigate the root cause of coder_internal's failure after the initial code generation. Consider implementing more robust error handling, better dependency management, or more thorough testing procedures before deploying code. Monitor the self-healing attempts to identify recurring error patterns and address them proactively.",
+            "keywords": [
+                "coder_internal",
+                "failure",
+                "self-healing",
+                "code instability",
+                "dependency management"
             ]
         }
     ],
@@ -157,6 +222,19 @@
                 "Vite",
                 "Component Generation",
                 "Project Setup"
+            ]
+        },
+        {
+            "title": "React Native Tamagui Project Initialization",
+            "category": "best_practice",
+            "summary": "The agent successfully initialized a React Native project using `create-vite` with the react-ts template and installed dependencies.",
+            "distillation": "When starting a new React Native project with Tamagui, use `npx -y create-vite@latest ./ --template react-ts --no-interactive && npm install` for quick setup and dependency installation.",
+            "keywords": [
+                "react native",
+                "tamagui",
+                "vite",
+                "initialization",
+                "project setup"
             ]
         }
     ]
