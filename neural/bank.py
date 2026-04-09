@@ -79,19 +79,60 @@ class ReasoningBank:
             self._save_bank()
             return ki
         except Exception as e:
-            print(f"⚠️ Gagal melakukan distilasi: {e}")
+            print(f"[WARN] Gagal melakukan distilasi: {e}")
             return None
 
-    def get_relevant_knowledge(self, task_description):
+    async def get_relevant_knowledge(self, task_description):
         """
-        Mencari pengetahuan relevan di bank berdasarkan kata kunci.
+        Mencari pengetahuan relevan dengan fase Reranking (Dify-style).
         """
-        relevant = []
+        # 1. Retrieval (Kandidat Kasar via Keywords)
+        candidates = []
         task_lower = task_description.lower()
-        
         for cat in self.bank:
             for item in self.bank[cat]:
                 if any(kw in task_lower for kw in item.get('keywords', [])):
-                    relevant.append(item)
+                    candidates.append(item)
                     
-        return relevant[:5]
+        if not candidates:
+            return []
+
+        # 2. Semantic Reranking (Penyaringan Cerdas via LLM)
+        rerank_prompt = f"""
+        Tugas Anda sebagai Knowledge Auditor.
+        Berikut adalah daftar kandidat pengetahuan (KIs) untuk tugas: "{task_description}"
+        
+        KANDIDAT:
+        {json.dumps(candidates[:10], indent=2)}
+        
+        Pilih maksimal 3 KI yang PALING KRITIS dan RELEVAN untuk memastikan tugas ini berhasil.
+        Berikan hasil dalam format JSON array berisi index yang dipilih.
+        Contoh: [0, 2]
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=DEFAULT_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a critical reranker. Select only the most mission-critical knowledge items."},
+                    {"role": "user", "content": rerank_prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            # Karena response_format json_object, pastikan kita parse key-nya jika ada
+            res_data = json.loads(response.choices[0].message.content)
+            # Mencari array di dalam response (seringkali LLM membungkus di dalam key)
+            indices = []
+            if isinstance(res_data, list): indices = res_data
+            elif isinstance(res_data, dict):
+                for v in res_data.values():
+                    if isinstance(v, list):
+                        indices = v
+                        break
+            
+            final_ki = [candidates[i] for i in indices if i < len(candidates)]
+            print(f"[RERANKER] Memilih {len(final_ki)} KI terbaik dari {len(candidates)} kandidat.")
+            return final_ki
+        except Exception as e:
+            print(f"[WARN] Gagal reranking, membocorkan kandidat kasar: {e}")
+            return candidates[:3]

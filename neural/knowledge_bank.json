@@ -77,6 +77,19 @@
                 "success",
                 "first attempt"
             ]
+        },
+        {
+            "title": "Successful website creation for a sports shoe store",
+            "category": "pattern",
+            "summary": "The agent successfully created a professional website for a sports shoe store through a sequence of terminal commands, code writing, and browser preview.",
+            "distillation": "When building websites, prioritize using a combination of terminal commands for setup, internal code writing and verification, and browser previews for quality assurance to ensure successful project completion.",
+            "keywords": [
+                "website creation",
+                "terminal commands",
+                "code verification",
+                "browser preview",
+                "project success"
+            ]
         }
     ],
     "resolved_errors": [
@@ -117,6 +130,32 @@
                 "self-healing",
                 "code instability",
                 "dependency management"
+            ]
+        },
+        {
+            "title": "Coder_internal fails repeatedly with self-healing",
+            "category": "error_resolution",
+            "summary": "The coder_internal agent failed repeatedly after multiple self-healing attempts, leading to project failure.",
+            "distillation": "Investigate the root cause of the coder_internal agent's repeated failures despite self-healing; possible areas for improvement include better error detection, more robust self-healing mechanisms, or improved initial code generation to minimize errors.",
+            "keywords": [
+                "coder_internal",
+                "self-healing",
+                "failure",
+                "error resolution",
+                "debugging"
+            ]
+        },
+        {
+            "title": "Terminal Bot Inactivity",
+            "category": "error_resolution",
+            "summary": "The terminal bot skipped actions due to a lack of valid commands in a project designed to create and fix a linting error in a React application.",
+            "distillation": "Ensure the planning system provides explicit and actionable terminal commands, especially in tasks requiring specific file modifications or execution steps. Improve error handling to provide feedback when no valid commands are found.",
+            "keywords": [
+                "terminal bot",
+                "skipped action",
+                "no commands",
+                "react linting",
+                "error handling"
             ]
         }
     ],
@@ -235,6 +274,23 @@
                 "vite",
                 "initialization",
                 "project setup"
+            ]
+        },
+        {
+            "Knowledge_Items": [
+                {
+                    "title": "Successful Website Creation Trajectory",
+                    "category": "pattern",
+                    "summary": "The agent successfully created a full website store through a sequence of terminal commands and internal code generation, followed by a browser preview.",
+                    "distillation": "The pattern involves utilizing terminal commands for environment setup and file manipulation, internal code generation for implementing website functionality, and finally, browser preview for visual verification. Prioritize efficient terminal command execution and code generation to optimize website creation.",
+                    "keywords": [
+                        "website creation",
+                        "terminal commands",
+                        "code generation",
+                        "browser preview",
+                        "successful project"
+                    ]
+                }
             ]
         }
     ]

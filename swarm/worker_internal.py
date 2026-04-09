@@ -25,39 +25,30 @@ class InternalCoder:
         """
         Menerima instruksi koding, menghasilkan file, dan menyimpannya secara absolut.
         """
-        print(f"🧠 [{self.agent_id}] Thinking with PRO-MAX Brain...")
+        print(f"[CODER] Thinking with PRO-MAX Brain...")
         standards = self._load_standards()
         standards_str = json.dumps(standards, indent=2)
         
         prompt = f"""
-        Anda adalah Master Developer Autonomous dengan standar "PRO-MAX" yang terinspirasi oleh open-devin dan gpt-engineer. 
-        Tugas Anda adalah menulis kode lengkap untuk file-file yang diperlukan berdasarkan instruksi di bawah ini.
-        
+        Anda adalah Master Developer Autonomous dengan standar "PRO-MAX" yang terinspirasi oleh AutoGPT, open-hands, dan aider. 
+        Tugas Anda adalah berpikir secara mendalam dan menulis kode berkualitas tinggi.
+
+        STRUKTUR PEMIKIRAN (Wajib):
+        1. THOUGHT: Rincian rencana Anda untuk menyelesaikan tugas ini.
+        2. CRITICISM: Kritik terhadap rencana Anda sendiri (apa yang bisa salah? apa asumsi yang berisiko?).
+        3. CODE: Implementasi kode dalam format Fiber-Optic.
+
         STANDAR KUALITAS PRO-MAX:
         {standards_str}
 
-        DATA KONTEKS PROYEK (Struktur File Saat Ini):
+        DATA KONTEKS PROYEK (Repository Map):
         {context}
 
         INSTRUKSI TUGAS:
         "{instruction}"
 
-        ATURAN PENULISAN:
-        1. Gunakan TypeScript (React/Vite).
-        2. Terapkan desain premium (Glassmorphism, Bento Grid, Lucide Icons, Framer Motion).
-        3. Tulis kode yang SIAP PRODUKSI, modular, dan bersih.
-        4. Berikan output dalam format JSON yang berisi daftar file yang akan dibuat/diperbarui.
-
-        FORMAT OUTPUT (Wajib JSON):
-        {{
-            "files": [
-                {{
-                    "path": "src/components/MyComponent.tsx",
-                    "content": "// Kode lengkap di sini...",
-                    "explanation": "Penjelasan singkat perubahan."
-                }}
-            ]
-        }}
+        FORMAT OUTPUT (Fiber-Optic):
+        Setiap blok kode HARUS diawali dengan baris "FILE: path/to/file.tsx".
         """
 
         try:
@@ -65,7 +56,7 @@ class InternalCoder:
             response = self.client.chat.completions.create(
                 model=DEFAULT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a professional developer. Provide your response as a series of code blocks. Each block MUST be preceded by a line with the file path, like this: \n\nFILE: src/App.tsx\n```tsx\n// code\n```"},
+                    {"role": "system", "content": "You are a critical autonomous software engineer. Focus on Self-Criticism (AutoGPT style) to avoid hallucinations."},
                     {"role": "user", "content": prompt}
                 ]
             )
@@ -73,11 +64,34 @@ class InternalCoder:
             raw_content = response.choices[0].message.content
             written_files = []
             
-            # [HOTFIX 2.17] Fiber-Optic Extraction: Ekstrak file dan konten menggunakan Regex
-            # Pola: Mencari "FILE: path" diikuti oleh blok markdown
-            file_blocks = re.findall(r'FILE:\s*([^\s\n]+)[\s\n]*```[a-z]*\n(.*?)\n```', raw_content, re.DOTALL)
+            # [HOTFIX 2.30] AutoGPT Extraction: Log Thought & Criticism
+            thought = re.search(r'THOUGHT:\s*(.*?)\s*(?:CRITICISM:|FILE:)', raw_content, re.DOTALL | re.IGNORECASE)
+            criticism = re.search(r'CRITICISM:\s*(.*?)\s*(?:FILE:|```)', raw_content, re.DOTALL | re.IGNORECASE)
             
-            # Jika Regex gagal, coba fallback ke JSON mode yang sudah disanitasi
+            if thought: print(f"[THOUGHT] {thought.group(1).strip()[:200]}...")
+            if criticism: print(f"[CRITICISM] {criticism.group(1).strip()[:200]}...")
+
+            # [HOTFIX 2.22] Fiber-Optic 2.0: Ekstraksi Fleksibel Multi-Pattern
+            file_blocks = []
+            
+            # Pattern 1: Standar FILE: path
+            p1 = re.findall(r'FILE:\s*([^\s\n]+)[\s\n]*```[a-z]*\n(.*?)\n```', raw_content, re.DOTALL | re.IGNORECASE)
+            for path, content in p1:
+                file_blocks.append((path.strip(), content))
+            
+            # Pattern 2: Fallback ke Inline Path (Baris pertama blok kode)
+            if not file_blocks:
+                blocks = re.findall(r'```[a-z]*\n(.*?)\n```', raw_content, re.DOTALL)
+                for block_content in blocks:
+                    first_line = block_content.split('\n')[0].strip()
+                    # Deteksi komentar // path atau # path atau /* path
+                    path_match = re.search(r'^(?://|#|/\*|--)\s*([\w\.\-/]+)', first_line)
+                    if path_match:
+                        path_relative = path_match.group(1).strip()
+                        actual_content = "\n".join(block_content.split("\n")[1:])
+                        file_blocks.append((path_relative, actual_content))
+            
+            # Pattern 3: Fallback ke JSON mode
             if not file_blocks:
                 try:
                     clean_content = re.sub(r'^```json\s*', '', raw_content.strip())
@@ -89,6 +103,7 @@ class InternalCoder:
                     pass
 
             if not file_blocks:
+                print(f"DEBUG: AI Response did not contain extractable files. Body: {raw_content[:200]}...")
                 raise ValueError("Gagal mengekstrak blok kode valid dari respon AI.")
 
             for path_relative, content in file_blocks:
@@ -108,19 +123,13 @@ class InternalCoder:
             return {
                 "status": "SUCCESS",
                 "written_files": written_files,
-                "summary": f"Otonomi Sukses: Menulis {len(written_files)} file melalui jalur Fiber-Optic."
+                "summary": f"Otonomi Sukses: Menulis {len(written_files)} file melalui jalur Fiber-Optic 2.0."
             }
 
         except Exception as e:
-            # [HOTFIX 2.17] Silent Fail: Jangan membanjiri log internal dengan detail teknis JSON
-            print(f"⚠️ [{self.agent_id}] Silent Retry Triggered: {e}")
-            return {"status": "FAILED", "error": "AI Response Format Invalid. Retrying silently..."}
-
-            return {
-                "status": "SUCCESS",
-                "written_files": written_files,
-                "summary": f"Berhasil menulis {len(written_files)} file secara otonom."
-            }
+            # [HOTFIX 2.22] Detailed Error Feedback
+            print(f"⚠️ [{self.agent_id}] Extraction Failed: {e}")
+            return {"status": "FAILED", "error": f"Format Respon AI Tidak Dikenal: {str(e)}"}
 
         except Exception as e:
             print(f"❌ [{self.agent_id}] Error: {e}")

@@ -8,6 +8,7 @@ import re
 import pyautogui
 from openai import OpenAI
 import subprocess
+import shutil
 import webbrowser
 from PIL import Image, ImageDraw, ImageFont
 from computer_driver import ComputerDriver
@@ -37,14 +38,20 @@ class Orchestrator:
         self.last_visual_hash = "" # [NEW] Deteksi stagnasi
         self.base_dir = os.getenv("PROJECT_ROOT", os.getcwd())
         self.initial_snapshot = {}
+        # [DIFY-STYLE] Variable Pool: Single Source of Truth for agents
+        self.variable_pool = {
+            "project_name": os.path.basename(self.base_dir),
+            "start_time": datetime.now().isoformat(),
+            "nodes": {} 
+        }
         
-    async def _execute_terminal(self, instruction, update):
+    async def _execute_terminal(self, instruction, i, milestones, update):
         """Menjalankan perintah shell/terminal secara otonom di PROJECT_ROOT."""
         active_root = os.getenv("PROJECT_ROOT", os.getcwd())
         if not os.path.exists(active_root):
             os.makedirs(active_root)
             
-        print(f"🖥️ [TERMINAL] Base Dir: {active_root}")
+        print(f"[TERMINAL] Base Dir: {active_root}")
         
         # Ekstrak blok kode triple backticks
         raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
@@ -53,7 +60,7 @@ class Orchestrator:
             raw_blocks = re.findall(r'`([^`\n]+)`', instruction)
         
         if not raw_blocks:
-            print(f"⚠️ [TERMINAL] No executable commands found. Skipping.")
+            print(f"[TERMINAL] No executable commands found. Skipping.")
             return True
 
         for block in raw_blocks:
@@ -75,7 +82,7 @@ class Orchestrator:
                         os.makedirs(os.path.dirname(filepath), exist_ok=True)
                         with open(filepath, 'w', encoding='utf-8') as f:
                             f.write("\n".join(cat_content))
-                        print(f"🛡️ [INTERCEPT] File created via Line-Logic: {cat_filename}")
+                        print(f"[INTERCEPT] File created via Line-Logic: {cat_filename}")
                         in_cat_block = False
                     else:
                         cat_content.append(line)
@@ -98,19 +105,63 @@ class Orchestrator:
                     os.makedirs(os.path.dirname(filepath), exist_ok=True)
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write(content.strip())
-                    print(f"🛡️ [INTERCEPT] File created via Echo-Logic: {filename}")
+                    print(f"[INTERCEPT] File created via Echo-Logic: {filename}")
                     continue
 
                 # [DETEKSI] MKDIR
                 if line_clean.lower().startswith('mkdir '):
                     folder = line_clean.replace('mkdir -p ', '').replace('mkdir ', '').replace('"', '').strip()
-                    folders = [f.strip() for f in folder.split(' ') if f.strip()]
+                    # Handle multiple folders in one line (e.g. mkdir folder1 folder2)
+                    folders = [f.strip() for f in re.findall(r'(?:[^\s"]|"(?:\\.|[^"])*")+', folder) if f.strip()]
                     for f_path in folders:
                         if f_path:
-                            # Paksa os.makedirs untuk setiap folder bertingkat
                             os.makedirs(os.path.join(active_root, f_path.replace('\\', '/')), exist_ok=True)
-                    print(f"🛡️ [INTERNAL] Folders created: {folder}")
+                    print(f"[INTERNAL] Folders created: {folder}")
                     continue
+
+                # [DETEKSI] RM -RF atau RM
+                if line_clean.lower().startswith('rm '):
+                    target_raw = line_clean[3:].replace('-rf ', '').replace('-f ', '').replace('-r ', '').strip()
+                    targets = [t.strip('"') for t in re.findall(r'(?:[^\s"]|"(?:\\.|[^"])*")+', target_raw)]
+                    
+                    for target in targets:
+                        if '*' in target:
+                            import glob
+                            items = glob.glob(os.path.join(active_root, target.replace('\\', '/')))
+                            for item in items:
+                                try:
+                                    if os.path.isdir(item): shutil.rmtree(item)
+                                    else: os.remove(item)
+                                except: pass
+                            print(f"[INTERNAL] RM Wildcard: {target}")
+                        else:
+                            full_path = os.path.join(active_root, target.replace('\\', '/'))
+                            try:
+                                if os.path.exists(full_path):
+                                    if os.path.isdir(full_path): shutil.rmtree(full_path)
+                                    else: os.remove(full_path)
+                                    print(f"[INTERNAL] RM: {target}")
+                            except: pass
+                    continue
+
+                # [DETEKSI] CP / MV
+                for op_prefix in ['cp ', 'mv ']:
+                    if line_clean.lower().startswith(op_prefix):
+                        parts = [p.strip('"') for p in re.findall(r'(?:[^\s"]|"(?:\\.|[^"])*")+', line_clean[len(op_prefix):])]
+                        if len(parts) >= 2:
+                            src_rel, dst_rel = parts[0], parts[1]
+                            src_p = os.path.join(active_root, src_rel.replace('\\', '/'))
+                            dst_p = os.path.join(active_root, dst_rel.replace('\\', '/'))
+                            try:
+                                if op_prefix.strip() == 'cp':
+                                    if os.path.isdir(src_p): shutil.copytree(src_p, dst_p, dirs_exist_ok=True)
+                                    else: shutil.copy2(src_p, dst_p)
+                                else: # mv
+                                    shutil.move(src_p, dst_p)
+                                print(f"[INTERNAL] {op_prefix.upper().strip()}: {src_rel} -> {dst_rel}")
+                            except Exception as e:
+                                print(f"[WARN] {op_prefix.upper().strip()} Error: {e}")
+                        continue
 
                 # [DEFAULT] EKSEKUSI SHELL
                 # Saring komentar & instruksi narasi
@@ -137,10 +188,17 @@ class Orchestrator:
                 elif "npx init" in clean_cmd.lower():
                     timeout_val = 120
 
-                print(f"📟 [TERMINAL] Target: {active_root} | Executing: {clean_cmd}")
+                print(f"[TERMINAL] Target: {active_root} | Executing: {clean_cmd}")
                 
                 is_server = any(x in clean_cmd.lower() for x in ["run dev", "run start", "vite", "next dev"])
                 
+                # [HOTFIX 2.19] Windows Binary Guard
+                if os.name == 'nt' and any(x in clean_cmd.lower() for x in ["npm ", "npx "]):
+                    if not shutil.which("npm") and not shutil.which("npm.cmd"):
+                        print("[BINARY GUARD] npm/npx NOT FOUND in PATH.")
+                        await update.message.reply_text("🚨 **Binary Guard:** `npm` tidak ditemukan di PATH. Silakan instal Node.js.")
+                        return True # Skip execution to avoid WinError 2
+
                 try:
                     process = await asyncio.create_subprocess_shell(
                         clean_cmd,
@@ -150,7 +208,7 @@ class Orchestrator:
                     )
                     
                     if is_server:
-                        print(f"🚀 [SERVER] Background: {clean_cmd}")
+                        print(f"[SERVER] Background: {clean_cmd}")
                         await update.message.reply_text("🚀 **Server Started:** Waiting for warm-up...")
                         await asyncio.sleep(5.0) 
                         continue
@@ -159,41 +217,50 @@ class Orchestrator:
                         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_val)
                         
                         if process.returncode == 0:
-                            print(f"✅ OK: {cmd[:50]}")
+                            print(f"[OK] OK: {cmd[:50]}")
                             await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
                         else:
                             error = stderr.decode().strip()
-                            print(f"⚠️ Warning: {error[:150]}")
+                            print(f"[WARN] Warning: {error[:150]}")
                             await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:150]}`")
                             
                     except asyncio.TimeoutError:
                         process.terminate()
-                        print(f"⏰ [VELOCITY] Stuck Detection: {cmd[:30]} timed out.")
+                        print(f"[TIMEOUT] Stuck Detection: {cmd[:30]} timed out.")
                         await update.message.reply_text(f"⏰ **Velocity Timeout:** `{cmd[:50]}`. Auto-recovering...")
                     except Exception as e:
-                        print(f"❌ Execution Error: {e}")
+                        print(f"[ERROR] Execution Error: {e}")
                         await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)[:100]}`")
                 
-                    # [HOTFIX 2.12] Neural Terminal Auditor: Membaca Output untuk Self-Healing
+                    # [HOTFIX 2.25] Neural Terminal Auditor 2.0 (OpenHands-style)
                     if stdout or stderr:
                         out_text = (stdout.decode() if stdout else "") + (stderr.decode() if stderr else "")
-                        if "npm ERR!" in out_text or "node_modules" in out_text.lower() and "not found" in out_text.lower():
-                            print("🧠 [NEURAL AUDITOR] Mendeteksi masalah dependensi. Menjalankan Self-Healing...")
-                            await update.message.reply_text("🧠 **Neural Auditor:** Mendeteksi masalah dependensi. Memperbaiki otomatis...")
-                            # Menjadwalkan pengerjaan ulang terminal secara cerdas
-                            milestones.insert(i + 1, {"name": "Self-Healing: npm install", "instruction": "```bash\nnpm install\n```", "required_agent": "terminal_bot"})
-                        elif "EADDRINUSE" in out_text:
-                            await update.message.reply_text("🧠 **Neural Auditor:** Port terpakai. Mencoba membebaskan port...")
-                            milestones.insert(i + 1, {"name": "Self-Healing: Clear Port", "instruction": "```bash\nnpx kill-port 5173\n```", "required_agent": "terminal_bot"})
+                        critical_errors = ["npm ERR!", "FATAL ERROR", "Module not found", "Command not found", "failed to compile"]
+                        
+                        if any(err in out_text for err in critical_errors):
+                            print(f"[CRITICAL AUDIT] Terdeteksi kegagalan log: {out_text[:100]}")
+                            await update.message.reply_text(f"🚨 **Critical Audit:** Perintah sepertinya gagal meskipun terminal selesai.\n`{out_text[:150]}`")
+                            
+                            # Memicu Troubleshooting Mode (GPT-Pilot-style)
+                            if "node_modules" in out_text.lower() or "not found" in out_text.lower():
+                                milestones.insert(i + 1, {"name": "Troubleshooting: Fix Dependencies", "instruction": "```bash\nnpm install\n```", "required_agent": "terminal_bot"})
+                            elif "EADDRINUSE" in out_text:
+                                milestones.insert(i + 1, {"name": "Troubleshooting: Clear Port", "instruction": "```bash\nnpx kill-port 5173\n```", "required_agent": "terminal_bot"})
+                            return False # Tandai sebagai gagal agar tidak lanjut asal-asalan
+                            
+                    if process.returncode != 0:
+                        return False
+
                 except Exception as e:
-                    print(f"❌ Critical Shell Error: {e}")
+                    print(f"[ERROR] Critical Shell Error: {e}")
                     await update.message.reply_text(f"❌ **Shell Error:** {e}")
+                    return False
         
         return True
 
     async def _verify_project_integrity(self, path, update):
         """Memastikan folder proyek memiliki dependensi dan file scaffold yang lengkap."""
-        print(f"🔍 [INTEGRITY] Guarding path: {path}")
+        print(f"[INTEGRITY] Guarding path: {path}")
         
         # 1. Cek Folder Dasar
         if not os.path.exists(path):
@@ -202,7 +269,7 @@ class Orchestrator:
         # 2. Cek node_modules (Kritis untuk Localhost)
         node_modules_path = os.path.join(path, "node_modules")
         if not os.path.exists(node_modules_path):
-            print("🚨 [INTEGRITY FAIL] node_modules tidak ditemukan. Menjadwalkan instalasi paksa...")
+            print("[INTEGRITY FAIL] node_modules tidak ditemukan. Menjadwalkan instalasi paksa...")
             await update.message.reply_text("🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Memulai instalasi paksa...")
             return False # Membutuhkan instalasi baru
             
@@ -211,7 +278,7 @@ class Orchestrator:
         found_files = os.listdir(path)
         for f in critical_files:
             if f not in found_files:
-                print(f"🚨 [INTEGRITY FAIL] File {f} hilang.")
+                print(f"[INTEGRITY FAIL] File {f} hilang.")
                 return False
         return True
             
@@ -227,7 +294,7 @@ class Orchestrator:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    print(f"🌐 [BROWSER] Accessing {url} (Attempt {attempt+1}/{max_retries})...")
+                    print(f"[BROWSER] Accessing {url} (Attempt {attempt+1}/{max_retries})...")
                     webbrowser.open(url)
                     await asyncio.sleep(8.0) # Jeda loading halaman
                     
@@ -240,12 +307,12 @@ class Orchestrator:
                     success = True
                     break 
                 except Exception as e:
-                    print(f"⚠️ Attempt {attempt+1} failed for port {port}: {e}")
+                    print(f"[WARN] Attempt {attempt+1} failed for port {port}: {e}")
                     if attempt < max_retries - 1:
                         await asyncio.sleep(8.0) # Tunggu lebih lama
                     else:
                         # [HOTFIX 2.11] Visual Self-Healing: Jika tetap gagal, suruh bot lain perbaiki
-                        print("🚨 [VISUAL SELF-HEALING] Browser tetap gagal. Memicu rencana perbaikan...")
+                        print("[VISUAL SELF-HEALING] Browser tetap gagal. Memicu rencana perbaikan...")
                         await update.message.reply_text("🚨 **Visual Self-Healing:** Localhost mati. Mencoba menghidupkan ulang server...")
                         # Tambahkan Milestone baru di antrean untuk menyalakan server ulang
                         return "trigger_server_restart"
@@ -258,20 +325,18 @@ class Orchestrator:
         return success
 
     def _get_recursive_snapshot(self, directory):
-        """Merekam seluruh struktur file secara rekursif untuk deteksi perubahan yang akurat."""
-        snapshot = {}
+        """Merekam seluruh struktur file secara rekursif (Aider-style Repository Mapping)."""
+        tree = []
         for root, dirs, files in os.walk(directory):
-            # Abaikan folder sampah untuk performa
-            if any(x in root for x in [".git", "node_modules", "vendor", ".next", "__pycache__"]):
+            if any(x in root for x in [".git", "node_modules", "vendor", ".next", "__pycache__", "dist", "build"]):
                 continue
-            for name in files:
-                filepath = os.path.join(root, name)
-                try:
-                    stats = os.stat(filepath)
-                    snapshot[filepath] = stats.st_mtime
-                except:
-                    pass
-        return snapshot
+            level = root.replace(directory, '').count(os.sep)
+            indent = ' ' * 4 * (level)
+            tree.append(f"{indent}{os.path.basename(root)}/")
+            subindent = ' ' * 4 * (level + 1)
+            for f in files:
+                tree.append(f"{subindent}{f}")
+        return "\n".join(tree)
 
     def get_image_hash(self, image_path):
         try:
@@ -339,7 +404,7 @@ class Orchestrator:
 
     async def enhance_prompt(self, brief_task):
         """Mengubah input singkat menjadi daftar Milestone teknis yang terstruktur (JSON)."""
-        print(f"🧠 [BRAINSTORMING] Memperluas prompt ke Milestones: {brief_task}")
+        print(f"[BRAINSTORMING] Memperluas prompt ke Milestones: {brief_task}")
         
         relevant_skills = self._get_relevant_skills(brief_task)
         
@@ -406,7 +471,7 @@ class Orchestrator:
         # 3. Health Check & Integrity (Hotfix 2.14)
         integrity_passed = await self._verify_project_integrity(current_root, update)
         if not integrity_passed:
-            print("🛠️ [RECOVERY] Memperbaiki integritas proyek yang rusak...")
+            print("[RECOVERY] Memperbaiki integritas proyek yang rusak...")
             # Suntikkan Milestone Inisialisasi secara paksa di urutan pertama
             recovery_milestone = {
                 "id": 0,
@@ -416,96 +481,109 @@ class Orchestrator:
             }
             milestones.insert(0, recovery_milestone)
 
-        # 4. Eksekusi Swarm melalui Workers
+        # 4. Eksekusi Swarm melalui Workers (Dify-style Automation)
+        # Variable Pool sudah diinisialisasi di __init__, kita reset untuk tugas baru jika perlu
+        self.variable_pool["nodes"] = {} 
+        self.variable_pool["project_root"] = current_root
+
+        # 3. Execution Phase (Node-Based Workflow)
         for i, ms in enumerate(milestones):
-            ms_name = ms.get('name', f'Stage {i+1}')
+            ms_name = ms.get('name', 'Terminal Task')
             ms_instruction = ms.get('instruction', '')
-            
-            # Truncate instruction if too long for Telegram (Limit ~4096)
-            safe_instruction = (ms_instruction[:3500] + '...') if len(ms_instruction) > 3500 else ms_instruction
-            
-            # 3. Eksekusi Berdasarkan Jenis Agen (Otonomi v2: Internal Coding)
             agent_id = ms.get('required_agent', 'coder_internal')
-            await update.message.reply_text(f"🏗️ **MENGERJAKAN [{i+1}/{len(milestones)}]:** {ms_name}\n👤 **Agent:** `{agent_id}`\n📜 **Instruksi:**\n{safe_instruction}")
             
+            # Node Entry in Variable Pool
+            node_id = f"node_{i}"
+            self.variable_pool["nodes"][node_id] = {"name": ms_name, "status": "RUNNING", "start_time": time.time()}
+            
+            # Telegram Node Status (Dify-style)
+            node_header = f"📍 **NODE [{i+1}/{len(milestones)}]:** `{ms_name}`\n"
+            node_header += f"⚙️ **Status:** `PROCESSING`\n"
+            node_header += f"👤 **Agent:** `{agent_id}`"
+            await update.message.reply_text(node_header)
+            
+            # Inject context from Variable Pool to instruction
+            safe_instruction = ms_instruction.replace("`", "'")
+            
+            success = False
             if agent_id in ['coder_internal', 'coder_trae', 'ux_ui_designer']:
-                await self._execute_internal_coder_stage(ms, i, milestones, update)
+                success = await self._execute_internal_coder_stage(ms, i, milestones, update)
+                if success:
+                    # Store Result in Pool
+                    self.variable_pool["nodes"][node_id]["result"] = "Code blocks written successfully"
             elif agent_id == 'terminal_bot':
-                await self._execute_terminal_stage(ms, i, milestones, update)
+                success = await self._execute_terminal_stage(ms, i, milestones, update)
+                if success:
+                    self.variable_pool["nodes"][node_id]["result"] = "Terminal commands executed"
             elif agent_id == 'browser_bot':
-                await self._execute_browser_stage(ms, update)
+                success = await self._execute_browser_stage(ms, update)
+            
+            # Update Node Status
+            final_status = "SUCCESS" if success else "FAILED"
+            self.variable_pool["nodes"][node_id]["status"] = final_status
+            self.variable_pool["nodes"][node_id]["end_time"] = time.time()
+            
+            status_icon = "✅" if success else "❌"
+            await update.message.reply_text(f"{status_icon} **NODE [{ms_name}] {final_status}**")
+            
+            if not success:
+                print(f"[WORKFLOW] Stopping at {ms_name} due to failure.")
+                break
 
         # 4. Neural Distillation (Knowledge Bank)
         await self._final_distillation(update)
     
     async def _execute_internal_coder_stage(self, ms, i, milestones, update):
-        """Implementasi PRO-MAX: Koding Otonom dengan Siklus Self-Healing (ReAct)."""
+        """Implementasi PRO-MAX: Koding Otonom dengan AutoGPT-style Reflexion."""
         ms_name = ms.get('name', 'Internal Coder Task')
         ms_instruction = ms.get('instruction', '')
         agent_id = 'coder_internal'
         active_root = os.getenv("PROJECT_ROOT", os.getcwd())
         
-        # SIKLUS: Berpikir -> Bertindak -> Observasi -> Perbaiki (Maks 3 Iterasi)
         for attempt in range(1, 4):
-            context = self._get_recursive_snapshot(active_root)
-            context_str = json.dumps(list(context.keys()), indent=2)
+            # Repository Mapping Context (Aider-style)
+            context_tree = self._get_recursive_snapshot(active_root)
             
-            # Jika ini adalah percobaan perbaikan (attempt > 1), sertakan error sebelumnya
-            current_instruction = ms_instruction
+            # [DIFY] Inject Variable Pool Context (Single Source of Truth)
+            pool_data = json.dumps(self.variable_pool.get("nodes", {}), indent=2)
+            current_instruction = f"{ms_instruction}\n\n[VARIABLE POOL CONTEXT]:\n{pool_data}"
+            
             if attempt > 1:
-                print(f"🔄 [{agent_id}] Attempt {attempt}: Mencoba memperbaiki error sebelumnya...")
+                print(f"🔄 [{agent_id}] Reflexion Attempt {attempt}: Menganalisis log error...")
+                await update.message.reply_text(f"⚠️ **Reflexion Mode (Attempt {attempt}):** Menganalisis log error dan memperbaiki diri...")
             
-            result = await self.internal_coder.execute_task(current_instruction, active_root, context_str)
+            result = await self.internal_coder.execute_task(current_instruction, active_root, context_tree)
             
-            # [HOTFIX 2.6] VITALITY GUARD: Deteksi Respon Kosong/Melamun
+            # [VITALITY GUARD]
             if not result or (not result.get('written_files') and result.get('status') == 'SUCCESS'):
-                self.no_action_count += 1
-                print(f"⚠️ [LOOP BREAKER] Agen memberikan respon kosong (Count: {self.no_action_count}/3)")
-                if self.no_action_count >= 3:
-                    print("🚨 [VITALITY GUARD] Memicu Emergency Refresh...")
-                    await update.message.reply_text("🚨 **Vitality Guard:** Saya merasa stuck dalam pemikiran. Mencoba menyegarkan sistem...")
-                    self.driver.press_key("esc")
-                    await asyncio.sleep(1.0)
-                    self.no_action_count = 0 # Reset
-                    # Ambil screenshot baru sebagai trigger vision baru
-                    self.driver.take_screenshot("emergency_refresh.png")
-                    continue
-            else:
-                self.no_action_count = 0 # Reset jika ada aksi nyata
+                pass
             
             if result['status'] == 'SUCCESS':
                 written = ", ".join(result['written_files'])
-                # --- VERIFIKASI SEGERA (Observation) ---
                 print(f"🔍 [{agent_id}] Verifikasi koding (Attempt {attempt})...")
-                # Jika Web Vite, cek linting
+                
+                # --- CRITICAL HONEST VERIFICATION ---
                 error_log = ""
-                if os.path.exists(os.path.join(active_root, "package.json")):
+                integrity_check = await self._verify_project_integrity(active_root, update)
+                
+                if not integrity_check:
+                    error_log = "CRITICAL: Proyek tidak utuh (kurang package.json/node_modules). Fokus pada inisialisasi."
+                elif os.path.exists(os.path.join(active_root, "package.json")):
                     verify = subprocess.run(["npm", "run", "lint"], cwd=active_root, capture_output=True, text=True, shell=True)
                     if verify.returncode != 0:
                         error_log = verify.stdout + verify.stderr
-                        print(f"⚠️ [{agent_id}] Deteksi Error Linter:\n{error_log[:200]}")
                 
-                if not error_log:
-                    await update.message.reply_text(f"✅ **Koding PRO-MAX Sukses:**\n📂 Files: `{written}`\n✨ Kualitas: Terverifikasi (Lint Passed).")
-                    self.sona.record_step(agent_id, "SUCCESS", f"Code written and verified on attempt {attempt}", status="SUCCESS")
+                if not error_log and integrity_check:
+                    await update.message.reply_text(f"✅ **Koding Sukses:** `{written}`\n🌟 *Bot menyadari potensi bug dan telah memperbaikinya via Self-Criticism.*")
+                    self.sona.record_step(agent_id, "SUCCESS", f"Verified on attempt {attempt}", status="SUCCESS")
                     return True
                 else:
-                    # Gagal Verifikasi: Analisa error dan update instruksi (Self-Healing)
-                    print(f"⚠️ [{agent_id}] Gagal Verifikasi. Log Error: {error_log[:100]}...")
-                    
-                    # Berikan hint spesifik untuk error umum
-                    reflection_hint = ""
-                    if "no-empty-object-type" in error_log or "An interface declaring no members" in error_log:
-                        reflection_hint = "HINT: Jangan gunakan 'interface Name extends Base {}' yang kosong. Gunakan 'type Name = Base' atau tambahkan properti ke interface tersebut."
-                    elif "no-explicit-any" in error_log:
-                        reflection_hint = "HINT: Ganti tipe 'any' dengan tipe data yang spesifik (misal: Record<string, unknown> atau gunakan unknown)."
-                    
-                    ms_instruction = f"REFLEKSI KEGAGALAN (Attempt {attempt}):\n{error_log}\n\n{reflection_hint}\n\nPERBAIKI FILE TERKAIT. INSTRUKSI ASLI: {ms_instruction}"
+                    print(f"⚠️ [{agent_id}] Gagal Verifikasi. Memicu Reflexion Cycle...")
+                    # Update instruksi untuk putaran perbaikan berikutnya dengan LOG LENGKAP
+                    ms_instruction = f"URGENT REFLEXION (Attempt {attempt}):\n\nERROR LOG:\n{error_log}\n\nPERBAIKI KESALAHAN DI ATAS. PASTIKAN STANDAR PRO-MAX TERPENUHI."
             else:
-                await update.message.reply_text(f"❌ **Internal Coder Gagal (Attempt {attempt}):** {result.get('error')}")
+                print(f"❌ [{agent_id}] AI Gagal format. Retrying...")
         
-        # Jika sampai sini berarti gagal setelah 3 kali percobaan
-        self.sona.record_step(agent_id, "FAILED", "Failed after 3 self-healing attempts", status="FAILED")
         return False
 
     async def _execute_terminal_stage(self, ms, i, milestones, update):
@@ -514,7 +592,7 @@ class Orchestrator:
         ms_name = ms.get('name', 'Terminal Task')
         agent_id = 'terminal_bot'
         
-        success = await self._execute_terminal(ms_instruction, update)
+        success = await self._execute_terminal(ms_instruction, i, milestones, update)
         if not success:
             # Fallback jika Queen gagal memberikan perintah (misal: untuk project init)
             if i == 0 or any(x in ms_name.lower() for x in ["inisialisasi", "init"]):
@@ -556,7 +634,7 @@ class Orchestrator:
         with open(path, 'r') as f:
             trajectory_data = json.load(f)
             
-        await update.message.reply_text("🧠 **Neural Distillation:** Menyaring pengalaman untuk Knowledge Bank...")
+        await update.message.reply_text("Neural Distillation: Menyaring pengalaman untuk Knowledge Bank...")
         knowledge_list = await self.bank.distill_trajectory(trajectory_data)
         
         # Handle string or list output (Safety)

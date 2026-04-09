@@ -30,10 +30,10 @@ class QueenCoordinator:
         """
         Pecah tugas menjadi Milestone strategis (Design -> Implement -> Test).
         """
-        print(f"👑 [QUEEN] Decomposing mission: {user_task}")
+        print(f"[QUEEN] Decomposing mission: {user_task}")
         
-        # Cari pengetahuan relevan dari bank
-        relevant_knowledge = self.bank.get_relevant_knowledge(user_task)
+        # Cari pengetahuan relevan dari bank dengan Reranking (Dify-style)
+        relevant_knowledge = await self.bank.get_relevant_knowledge(user_task)
         knowledge_context = json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "None"
 
         prompt = f"""
@@ -82,7 +82,7 @@ class QueenCoordinator:
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            print(f"⚠️ Queen failed to decompose: {e}")
+            print(f"[WARN] Queen failed to decompose: {e}")
             # [HOTFIX 2.10] Rich Fallback: Pastikan instalasi & server selalu ada
             return {
                 "strategy": "Recovery fallback (Complete Cycle)", 
@@ -122,12 +122,12 @@ class QueenCoordinator:
         self.sona.start_trajectory(user_task)
         
         if update_callback:
-            await update_callback(f"👑 **Queen Strategy:**\n{plan['strategy']}\n\n🏃 **Target:** {len(plan['milestones'])} Milestones.")
+            await update_callback(f"[STRATEGY] Queen Strategy:\n{plan['strategy']}\n\n[TARGET] Target: {len(plan['milestones'])} Milestones.")
 
         final_results = []
         for ms in plan['milestones']:
             if update_callback:
-                await update_callback(f"🏗️ **MENGERJAKAN Milestone {ms['id']}:** {ms['name']}")
+                await update_callback(f"[STEP] MENGERJAKAN Milestone {ms['id']}: {ms['name']}")
             
             # 1. Pilih Worker (untuk saat ini kita hanya punya Trae Worker)
             # Logika seleksi agen bisa lebih kompleks di masa depan
@@ -135,7 +135,7 @@ class QueenCoordinator:
             
             # 2. Eksekusi melalui worker (akan diimplementasikan di worker_trae.py)
             # Placeholder for worker execution
-            print(f"🚀 Delegating '{ms['name']}' to {agent_id}...")
+            print(f"[QUEEN] Delegating '{ms['name']}' to {agent_id}...")
             
             # --- Simulasi Step untuk SONA ---
             self.sona.record_step(

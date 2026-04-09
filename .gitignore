@@ -26,3 +26,9 @@ dist/
 
 # Temp
 tmp/
+neural/storage/
+TEST_INTEGRATION_PROMAX/
+STRESS_TEST_V25/
+demo_hotfix/
+test_init/
+test/

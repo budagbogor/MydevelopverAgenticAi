@@ -18,13 +18,13 @@ class ComputerDriver:
         # --- CALIBRATION: DPI SCALE ---
         # Jika layar 4K dengan scaling 150%, set DPI_SCALE=1.5 di .env
         self.dpi_scale = float(os.getenv("DPI_SCALE", "1.0"))
-        print(f"⚙️ Driver diinisialisasi (DPI Scale: {self.dpi_scale})")
+        print(f"[DRIVER] Inisialisasi (DPI Scale: {self.dpi_scale})")
     def close_ide(self):
         """Mematikan proses IDE secara paksa untuk restart bersih."""
         try:
             import subprocess
             exe_name = os.path.basename(IDE_PATH)
-            print(f"🛑 Mematikan {TARGET_IDE} ({exe_name})...")
+            print(f"[STOP] Mematikan {TARGET_IDE} ({exe_name})...")
             # Gunakan taskkill dengan /F (force) dan /T (tree) untuk mematikan semua sub-proses
             subprocess.run(["taskkill", "/F", "/T", "/IM", exe_name], capture_output=True)
             time.sleep(2.0) # Tunggu cleanup
@@ -32,12 +32,12 @@ class ComputerDriver:
             if os.path.exists("bot.lock"): os.remove("bot.lock")
             return True
         except Exception as e:
-            print(f"⚠️ Gagal mematikan IDE: {e}")
+            print(f"[WARN] Gagal mematikan IDE: {e}")
             return False
 
     def close_all_tabs(self):
         """Menutup semua tab editor di Trae/VSCode menggunakan hotkey Ctrl+K W."""
-        print("🧼 Membersihkan tab editor (Clean Slate)...")
+        print("[CLEAN] Membersihkan tab editor (Clean Slate)...")
         self.ensure_focus() # Pastikan terfokus sebelum menekan hotkey
         pyautogui.hotkey('ctrl', 'k')
         time.sleep(0.2)
@@ -49,7 +49,7 @@ class ComputerDriver:
         Memastikan jendela aplikasi aktif secara dinamis menggunakan UI Automation.
         """
         target = target_name if target_name else TARGET_IDE
-        print(f"🔍 [EYES] Mencoba fokus ke: {target}")
+        print(f"[EYES] Mencoba fokus ke: {target}")
         
         try:
             # 1. Cari jendela menggunakan uiautomation (lebih tangguh)
@@ -62,7 +62,7 @@ class ComputerDriver:
                     break
             
             if target_win and not force_restart:
-                print(f"✅ [EYES] Menemukan jendela via UIA: {target_win.Name}")
+                print(f"[EYES] Menemukan jendela via UIA: {target_win.Name}")
                 # Gunakan GetWindowVisualState() sesuai spek uiautomation
                 try:
                     if target_win.GetWindowVisualState() == auto.WindowVisualState.Minimized:
@@ -77,7 +77,7 @@ class ComputerDriver:
             
             # 2. Fallback: Jika uiautomation gagal, coba jalankan IDE
             if target == TARGET_IDE:
-                print(f"🚀 [EYES] IDE belum terbuka, menjalankan: {IDE_PATH}...")
+                print(f"[EYES] IDE belum terbuka, menjalankan: {IDE_PATH}...")
                 subprocess.Popen(f'"{IDE_PATH}" "{os.getenv("PROJECT_ROOT", os.getcwd())}"', shell=True)
                 # Tunggu jendela muncul (maks 20 detik)
                 for _ in range(20):
@@ -89,7 +89,7 @@ class ComputerDriver:
             
             return False
         except Exception as e:
-            print(f"⚠️ [EYES] Gagal fokus ke {target}: {e}")
+            print(f"[EYES] Gagal fokus ke {target}: {e}")
             return False
 
     def capture_screen(self, filename="current_state.png"):
@@ -133,14 +133,14 @@ class ComputerDriver:
                 target_x = (x_p / 100) * width
                 target_y = (y_p / 100) * height
                 
-                print(f"🤖 CLICK at ({int(target_x)}, {int(target_y)})")
+                print(f"[CLICK] at ({int(target_x)}, {int(target_y)})")
                 pyautogui.moveTo(target_x, target_y, duration=0.3)
                 pyautogui.click()
                 
             elif action_type == "TYPE":
                 if not params or len(params) < 1: return
                 # Klik area input terlebih dahulu untuk memastikan kursor aktif
-                print(f"⌨️ Typing Verbatim: {params[0][:30]}...")
+                print(f"[TYPE] Typing Verbatim: {params[0][:30]}...")
                 # Jeda 2 detik (Warm-up) agar Windows/Trae benar-benar siap menerima karakter pertama
                 time.sleep(2.0)
                 pyautogui.write(str(params[0]), interval=0.05)
@@ -148,7 +148,7 @@ class ComputerDriver:
                 # --- AUTO-SUBMIT (Insurance) ---
                 time.sleep(1.0)
                 pyautogui.press('enter')
-                print("✅ Submit Sent")
+                print("[OK] Submit Sent")
                 
             elif action_type == "HOTKEY":
                 if not params: return
@@ -167,4 +167,4 @@ class ComputerDriver:
                 time.sleep(duration)
                 
         except Exception as e:
-            print(f"❌ Driver Error: {e}")
+            print(f"[ERROR] Driver Error: {e}")

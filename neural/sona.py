@@ -20,7 +20,7 @@ class SonaMemory:
         self.current_trajectory = []
         self.goal = goal
         self.start_time = datetime.now().isoformat()
-        print(f"🧠 [SONA] Starting trajectory for goal: {goal}")
+        print(f"[SONA] Starting trajectory for goal: {goal}")
 
     def record_step(self, agent_id, action, observation, thought="", status="SUCCESS"):
         step = {
@@ -32,7 +32,7 @@ class SonaMemory:
             "status": status
         }
         self.current_trajectory.append(step)
-        print(f"📍 [SONA] Step recorded for {agent_id}: {action[:50]}... Status: {status}")
+        print(f"[SONA] Step recorded for {agent_id}: {action[:50]}... Status: {status}")
 
     def end_trajectory(self, verdict, conclusion):
         """
@@ -52,7 +52,7 @@ class SonaMemory:
         with open(filepath, 'w') as f:
             json.dump(summary, f, indent=4)
             
-        print(f"🏁 [SONA] Trajectory ended. Verdict: {verdict}. Saved to {filepath}")
+        print(f"[SONA] Trajectory ended. Verdict: {verdict}. Saved to {filepath}")
         return filepath
 
     def get_recent_trajectories(self, limit=5):

@@ -4,7 +4,7 @@ import sys
 import time
 from telegram import BotCommand
 from telegram.ext import Application, MessageHandler, CommandHandler, filters
-from config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_WHITELIST, GITHUB_TOKEN, VERCEL_TOKEN, save_config
+from config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_WHITELIST, GITHUB_TOKEN, VERCEL_TOKEN, PROJECT_ROOT, save_config
 from orchestrator import Orchestrator
 from deployment import DeploymentManager
 from search_tool import WebSearch
@@ -119,7 +119,7 @@ class TelegramBot:
     async def handle_stop(self, update, context):
         """Emergency Reset Status Bot."""
         self.is_processing = False
-        await update.message.reply_text("🛑 **BOT DIMATIKAN PAKSA:** Status reset ke Siap (Ready).")
+        await update.message.reply_text("[STOP] BOT DIMATIKAN PAKSA: Status reset ke Siap (Ready).")
 
     async def handle_deploy_github(self, update, context):
         user_id = update.effective_user.id

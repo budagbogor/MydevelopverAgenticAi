@@ -26,7 +26,7 @@ def main():
         # Jangan tutup socket ini! Ia harus tetap 'terpakai' selama bot jalan.
     except socket.error:
         print("\n" + "!"*50)
-        print("🛑 ERROR: Bot sedang berjalan di jendela lain!")
+        print("[STOP] ERROR: Bot sedang berjalan di jendela lain!")
         print("Tutup jendela bot yang sudah ada terlebih dahulu.")
         print("!"*50 + "\n")
         sys.exit(1)
@@ -64,7 +64,7 @@ def main():
         if os.path.exists(LOCK_FILE):
             try:
                 os.remove(LOCK_FILE)
-                print(f"🛑 {LOCK_FILE} telah dibersihkan. Selesai.")
+                print(f"[STOP] {LOCK_FILE} telah dibersihkan. Selesai.")
             except:
                 pass
 
