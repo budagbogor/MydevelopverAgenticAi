@@ -19,6 +19,11 @@ async def run_integration_test():
     if os.path.exists(test_dir):
         shutil.rmtree(test_dir)
     os.makedirs(test_dir, exist_ok=True)
+    
+    # SIMULASI MESSY DIRECTORY (Hotfix 2.27 Test)
+    with open(os.path.join(test_dir, "garbage.txt"), "w") as f:
+        f.write("this file should be cleaned by integrity guard")
+    
     os.environ["PROJECT_ROOT"] = test_dir
     
     # Init Orchestrator

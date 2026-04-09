@@ -170,7 +170,7 @@ class Orchestrator:
 
                 # Modifikasi agar non-interaktif
                 cmd = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
-                             r'\1\2 --no-interactive ', line_clean)
+                             r'\1\2 -y ', line_clean)
                 
                 # Cleanup language labels (e.g. "bash npm install")
                 for lang in ['shell ', 'bash ', 'powershell ', 'cmd ']:
@@ -268,17 +268,25 @@ class Orchestrator:
         """Memastikan folder proyek memiliki dependensi dan file scaffold yang lengkap."""
         print(f"[INTEGRITY] Guarding path: {path}")
         
-        # 1. Cek Folder Dasar
+        # 1. Cek Folder Dasar & Bersihkan jika EMPTY
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
             return "EMPTY"
-            
-        # 2. Cek file scaffold Vite
-        critical_files = ["package.json"]
+        
+        # [HOTFIX 2.27] Anti-Stuck Cleanup: Jika folder tidak valid, kosongkan isinya
+        # agar 'npm create vite .' tidak memicu prompt interaktif.
         found_files = os.listdir(path)
+        critical_files = ["package.json"]
         has_scaffold = all(f in found_files for f in critical_files)
         
         if not has_scaffold:
+            print(f"[INTEGRITY] Cleaning messy directory for fresh scaffold: {path}")
+            for item in found_files:
+                item_path = os.path.join(path, item)
+                try:
+                    if os.path.isdir(item_path): shutil.rmtree(item_path)
+                    else: os.remove(item_path)
+                except: pass
             return "EMPTY"
 
         # 3. Cek node_modules (Kritis untuk Localhost)
@@ -482,7 +490,7 @@ class Orchestrator:
             
             if integrity_status == "EMPTY":
                 msg = "🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite..."
-                recovery_instr = "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```"
+                recovery_instr = "```bash\nnpm create vite@latest . -y -- --template react-ts\nnpm install\n```"
             else: # MISSING_DEPS
                 msg = "🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang..."
                 recovery_instr = "```bash\nnpm install\n```"

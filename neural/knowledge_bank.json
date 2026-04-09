@@ -222,6 +222,19 @@
                 "parsing instructions",
                 "command execution"
             ]
+        },
+        {
+            "title": "Agent Skipping Actions Due to No Valid Commands",
+            "category": "error_resolution",
+            "summary": "The agent skipped actions because it did not identify any valid commands to execute, resulting in a failed objective.",
+            "distillation": "When an agent fails to identify valid commands and skips actions, investigate the command generation logic and ensure that the agent is correctly parsing the environment or task requirements to produce executable commands; review the agent's observation and thought process to identify potential misinterpretations or lack of relevant information.",
+            "keywords": [
+                "skipped action",
+                "no commands",
+                "command parsing",
+                "task failure",
+                "agent logic"
+            ]
         }
     ],
     "best_practices": [
