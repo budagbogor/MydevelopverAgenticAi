@@ -64,11 +64,16 @@ class QueenCoordinator:
                     "id": 1,
                     "name": "Nama Milestone",
                     "instruction": "Pastikan setiap Milestone memiliki daftar instruksi yang JELAS untuk agen koding (internal_coder) atau agen terminal (terminal_bot). ATURAN KRITIS WINDOWS: 1. DILARANG menggunakan terminal_bot untuk menulis konten file (seperti echo > atau cat <<EOF). Setiap pembuatan atau modifikasi konten file WAJIB dilakukan oleh internal_coder. 2. terminal_bot hanya digunakan untuk: npm install, npx init, git, dan manajemen proses. 3. Hapus semua file boilerplate (Clean Slate) sebelum mulai koding profesional.",
-                    "required_agent": "terminal_bot" | "coder_internal" | "browser_bot",
+                    "required_agent": "terminal_bot" | "coder_internal" | "coder_trae" | "browser_bot",
                     "is_critical": true
                 }}
             ]
         }}
+
+        PENTING:
+        - "coder_trae": Gunakan untuk tahap pembuatan UI Utama, Halaman depan, atau fitur visual yang ingin dilihat pengguna di layar secara profesional (RPA-Mode).
+        - "coder_internal": Gunakan untuk penulisan logika berat, pembenaran bug mendalam, atau struktur file masif agar cepat dan andal.
+        - "terminal_bot": Tetap gunakan untuk inisialisasi dan management server.
         """
         
         try:

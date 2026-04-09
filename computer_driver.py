@@ -167,4 +167,36 @@ class ComputerDriver:
                 time.sleep(duration)
                 
         except Exception as e:
-            print(f"[ERROR] Driver Error: {e}")
+            print(f"[ERROR] Driver Error: {e}")
+
+    def type_in_trae(self, instruction):
+        """Metode khusus untuk berinteraksi dengan Trae AI Builder via Ctrl+U."""
+        print(f"[VISUAL] Mengirim instruksi ke Trae Builder: {instruction[:50]}...")
+        if self.ensure_focus():
+            # 1. Buka AI Builder (Ctrl+U sesuai permintaan user)
+            pyautogui.hotkey('ctrl', 'u')
+            time.sleep(2.0) # Tunggu panel muncul
+            
+            # 2. Ketik instruksi
+            pyautogui.write(instruction, interval=0.01)
+            time.sleep(0.5)
+            
+            # 3. Kirim (Enter)
+            pyautogui.press('enter')
+            print("[VISUAL] Instruksi terkirim ke Trae.")
+            return True
+        return False
+
+    def open_in_trae(self, file_path):
+        """Membuka file tertentu di Trae agar pengguna bisa melihat hasilnya di layar."""
+        print(f"[VISUAL] Membuka file di Trae: {file_path}")
+        if self.ensure_focus():
+            # Gunakan Ctrl+P (Quick Open)
+            pyautogui.hotkey('ctrl', 'p')
+            time.sleep(0.5)
+            # Ketik nama file
+            pyautogui.write(os.path.basename(file_path), interval=0.01)
+            time.sleep(0.5)
+            pyautogui.press('enter')
+            return True
+        return False

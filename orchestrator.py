@@ -531,10 +531,25 @@ class Orchestrator:
             
             success = False
             if agent_id in ['coder_internal', 'coder_trae', 'ux_ui_designer']:
+                # [VISUAL CODER UPGRADE]
+                # Ambil screenshot awal sebelum mulai koding (permintaan user)
+                try:
+                    init_img = self.driver.take_screenshot(f"init_{node_id}.png")
+                    with open(init_img, 'rb') as f:
+                        await update.message.reply_photo(photo=f, caption=f"📸 **Visual Start:** Memulai pengerjaan `{ms_name}`...")
+                except: pass
+
                 success = await self._execute_internal_coder_stage(ms, i, milestones, update)
                 if success:
                     # Store Result in Pool
                     self.variable_pool["nodes"][node_id]["result"] = "Code blocks written successfully"
+                    
+                    # [VISUAL PROGRESS] Ambil screenshot setelah koding selesai
+                    try:
+                        progress_img = self.driver.take_screenshot(f"progress_{node_id}.png")
+                        with open(progress_img, 'rb') as f:
+                            await update.message.reply_photo(photo=f, caption=f"📸 **Visual Progress:** `{ms_name}` selesai.")
+                    except: pass
             elif agent_id == 'terminal_bot':
                 success = await self._execute_terminal_stage(ms, i, milestones, update)
                 if success:
@@ -572,6 +587,12 @@ class Orchestrator:
             pool_data = json.dumps(self.variable_pool.get("nodes", {}), indent=2)
             current_instruction = f"{ms_instruction}\n\n[VARIABLE POOL CONTEXT]:\n{pool_data}"
             
+            # [VISUAL RPA UPGRADE] Jika menggunakan Trae, kirim ke UI
+            if agent_id == 'coder_trae':
+                self.driver.type_in_trae(current_instruction)
+                # Berikan waktu Trae untuk memproses (vision monitoring bisa ditambahkan nanti)
+                await asyncio.sleep(15.0) 
+
             if attempt > 1:
                 print(f"🔄 [{agent_id}] Reflexion Attempt {attempt}: Menganalisis log error...")
                 await update.message.reply_text(f"⚠️ **Reflexion Mode (Attempt {attempt}):** Menganalisis log error dan memperbaiki diri...")
@@ -599,6 +620,12 @@ class Orchestrator:
                 
                 if not error_log and integrity_check:
                     await update.message.reply_text(f"✅ **Koding Sukses:** `{written}`\n🌟 *Bot menyadari potensi bug dan telah memperbaikinya via Self-Criticism.*")
+                    
+                    # [VISUAL UPGRADE] Buka file di Trae agar muncul di layar
+                    for f_rel in result['written_files']:
+                        self.driver.open_in_trae(os.path.join(active_root, f_rel))
+                        time.sleep(1.0)
+
                     self.sona.record_step(agent_id, "SUCCESS", f"Verified on attempt {attempt}", status="SUCCESS")
                     return True
                 else:
