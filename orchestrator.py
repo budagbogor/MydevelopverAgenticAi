@@ -190,7 +190,13 @@ class Orchestrator:
 
                 print(f"[TERMINAL] Target: {active_root} | Executing: {clean_cmd}")
                 
-                is_server = any(x in clean_cmd.lower() for x in ["run dev", "run start", "vite", "next dev"])
+                # [HOTFIX 2.26] Precise Server Detection: Avoid flagging 'create' or 'init' as background server.
+                is_server = False
+                server_keywords = ["run dev", "run start", "next dev", "yarn dev", "npm start"]
+                if any(kw in clean_cmd.lower() for kw in server_keywords):
+                    is_server = True
+                elif clean_cmd.strip().lower() == "vite" or clean_cmd.strip().lower().endswith("bin/vite"):
+                    is_server = True
                 
                 # [HOTFIX 2.19] Windows Binary Guard
                 if os.name == 'nt' and any(x in clean_cmd.lower() for x in ["npm ", "npx "]):
@@ -265,22 +271,23 @@ class Orchestrator:
         # 1. Cek Folder Dasar
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
+            return "EMPTY"
             
-        # 2. Cek node_modules (Kritis untuk Localhost)
+        # 2. Cek file scaffold Vite
+        critical_files = ["package.json"]
+        found_files = os.listdir(path)
+        has_scaffold = all(f in found_files for f in critical_files)
+        
+        if not has_scaffold:
+            return "EMPTY"
+
+        # 3. Cek node_modules (Kritis untuk Localhost)
         node_modules_path = os.path.join(path, "node_modules")
         if not os.path.exists(node_modules_path):
-            print("[INTEGRITY FAIL] node_modules tidak ditemukan. Menjadwalkan instalasi paksa...")
-            await update.message.reply_text("🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Memulai instalasi paksa...")
-            return False # Membutuhkan instalasi baru
+            print("[INTEGRITY FAIL] node_modules tidak ditemukan.")
+            return "MISSING_DEPS"
             
-        # 3. Cek file scaffold Vite
-        critical_files = ["package.json", "index.html"]
-        found_files = os.listdir(path)
-        for f in critical_files:
-            if f not in found_files:
-                print(f"[INTEGRITY FAIL] File {f} hilang.")
-                return False
-        return True
+        return "READY"
             
         return True
 
@@ -468,15 +475,24 @@ class Orchestrator:
         current_root = os.getenv("PROJECT_ROOT", os.getcwd())
         self.initial_snapshot = self._get_recursive_snapshot(current_root)
         
-        # 3. Health Check & Integrity (Hotfix 2.14)
-        integrity_passed = await self._verify_project_integrity(current_root, update)
-        if not integrity_passed:
-            print("[RECOVERY] Memperbaiki integritas proyek yang rusak...")
-            # Suntikkan Milestone Inisialisasi secara paksa di urutan pertama
+        # 3. Health Check & Integrity (Hotfix 2.26 - Granular Recovery)
+        integrity_status = await self._verify_project_integrity(current_root, update)
+        if integrity_status != "READY":
+            print(f"[RECOVERY] Memperbaiki integritas proyek ({integrity_status})...")
+            
+            if integrity_status == "EMPTY":
+                msg = "🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite..."
+                recovery_instr = "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```"
+            else: # MISSING_DEPS
+                msg = "🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang..."
+                recovery_instr = "```bash\nnpm install\n```"
+                
+            await update.message.reply_text(msg)
+            
             recovery_milestone = {
                 "id": 0,
                 "name": "Emergency Project Recovery",
-                "instruction": "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```",
+                "instruction": recovery_instr,
                 "required_agent": "terminal_bot"
             }
             milestones.insert(0, recovery_milestone)
@@ -655,5 +671,6 @@ class Orchestrator:
         # Ambil screenshot hasil akhir satu kali
         try:
             raw_img = self.driver.take_screenshot("final_result.png")
-            await update.message.reply_photo(photo=open(raw_img, 'rb'), caption="🖼️ **Hasil Akhir Proyek**")
+            with open(raw_img, 'rb') as photo_file:
+                await update.message.reply_photo(photo=photo_file, caption="Hasil Akhir Proyek")
         except: pass

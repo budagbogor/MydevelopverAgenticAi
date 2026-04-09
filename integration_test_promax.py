@@ -65,6 +65,11 @@ async def run_integration_test():
         print(f"[CRITICAL TEST FAIL] Terjadi error saat pengujian: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # PEMBERSIHAN RESOURCE (Mencegah ResourceWarning)
+        print("\n[CLEANUP] Membersihkan resource...")
+        # Berikan waktu sejenak agar transport asyncio menutup pipe
+        await asyncio.sleep(0.5)
 
     print("\n[INTEGRATION TEST DONE] Periksa log di atas untuk validasi perilaku bot.")
 

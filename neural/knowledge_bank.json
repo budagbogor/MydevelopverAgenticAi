@@ -90,6 +90,19 @@
                 "browser preview",
                 "project success"
             ]
+        },
+        {
+            "title": "Terminal Bot Inaction on Completion",
+            "category": "pattern",
+            "summary": "The terminal bot skipped its turn because the project sequence was already completed.",
+            "distillation": "Ensure terminal bot has a defined action, even after project completion, such as verification or final report generation to prevent skipped turns.",
+            "keywords": [
+                "terminal_bot",
+                "skipped action",
+                "completion",
+                "no command",
+                "idle"
+            ]
         }
     ],
     "resolved_errors": [
@@ -156,6 +169,58 @@
                 "no commands",
                 "react linting",
                 "error handling"
+            ]
+        },
+        {
+            "title": "Terminal Bot Inaction on Completion",
+            "category": "error_resolution",
+            "summary": "The terminal bot skipped its action after the project sequence was completed, indicating a potential failure in handling the final state.",
+            "distillation": "Implement a check within the terminal bot to ensure it executes a final verification step or provides a completion message upon project completion, even if no explicit commands are needed. This would prevent skipped actions and offer better feedback.",
+            "keywords": [
+                "terminal bot",
+                "skipped action",
+                "completion handling",
+                "final verification",
+                "error resolution"
+            ]
+        },
+        {
+            "title": "Agent stalled due to lack of valid commands.",
+            "category": "error_resolution",
+            "summary": "The agent stalled because it could not identify any valid commands to execute, leading to a skipped action.",
+            "distillation": "Ensure agents are equipped with a robust command recognition and execution mechanism, including error handling for situations where no valid commands are applicable to prevent stalling; implement a fallback behavior or alternative action strategy when faced with no valid commands.",
+            "keywords": [
+                "agent stalling",
+                "no valid commands",
+                "skipped action",
+                "command recognition",
+                "fallback behavior"
+            ]
+        },
+        {
+            "title": "Terminal Bot Inaction",
+            "category": "error_resolution",
+            "summary": "The terminal bot skipped execution due to a lack of valid commands, indicating a potential issue in command generation or task clarity.",
+            "distillation": "Ensure that the task decomposition and command generation processes provide clear and executable commands for the terminal bot to prevent inaction.",
+            "keywords": [
+                "terminal bot",
+                "skipped",
+                "no commands",
+                "command generation",
+                "task clarity"
+            ]
+        },
+        {
+            "title": "Agent failed to execute any valid commands.",
+            "category": "error_resolution",
+            "summary": "The agent failed to execute any valid commands, resulting in a skipped action during the execution of the project sequence.",
+            "distillation": "Investigate the reason why no valid commands were generated and ensure the agent can properly parse the instructions and execute relevant commands to complete the task.",
+            "keywords": [
+                "no valid commands",
+                "skipped action",
+                "agent failure",
+                "parsing instructions",
+                "command execution"
             ]
         }
     ],
