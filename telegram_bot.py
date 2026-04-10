@@ -183,14 +183,14 @@ class TelegramBot:
             if folder_name and folder_name != current_project:
                 await update.message.reply_text(f"📁 **Disiplin Proyek Baru:** Menciptakan lingkungan `{folder_name}`...", parse_mode='Markdown')
                 context.args = [folder_name]
-                return await self.handle_new_project(update, context)
-        
-        # PROACTIVE NOTIFICATION: Inform if continuing OLD project
-        await update.message.reply_text(
-            f"🔄 **Melanjutkan di:** `{current_project}`\n"
-            f"💡 *Tip: Jika ini seharusnya proyek baru, gunakan perintah /new_project [nama]*", 
-            parse_mode='Markdown'
-        )
+                await self.handle_new_project(update, context)
+        else:
+            # PROACTIVE NOTIFICATION: Inform if continuing OLD project
+            await update.message.reply_text(
+                f"🔄 **Melanjutkan di:** `{current_project}`\n"
+                f"💡 *Tip: Jika ini seharusnya proyek baru, gunakan perintah /new_project [nama]*", 
+                parse_mode='Markdown'
+            )
 
         self.is_processing = True
         try:
