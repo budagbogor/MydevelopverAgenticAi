@@ -227,22 +227,24 @@ class Orchestrator:
                     async def stream_reader(pipe, is_stderr=False):
                         nonlocal last_update_time
                         while True:
-                            line = await pipe.readline()
-                            if not line: break
+                            # [HOTFIX 6.0] Chunk-based reading: avoid hang on prompts without newlines
+                            chunk = await pipe.read(1024)
+                            if not chunk: break
                             
-                            line_str = line.decode().strip()
-                            if is_stderr: full_stderr.append(line_str)
-                            else: full_stdout.append(line_str)
+                            chunk_str = chunk.decode(errors='ignore').strip()
+                            if is_stderr: full_stderr.append(chunk_str)
+                            else: full_stdout.append(chunk_str)
                             
-                            # Filter log penting (error, success, atau progres paket)
-                            if any(kw in line_str.lower() for kw in ["error", "warn", "added", "removed", "success", "done", "@", "%"]):
-                                log_buffer.append(line_str)
+                            # Filter log penting
+                            if any(kw in chunk_str.lower() for kw in ["error", "warn", "added", "removed", "success", "done", "@", "%", "?", "»"]):
+                                log_buffer.append(chunk_str)
                             
-                            # Update ke Telegram setiap 10 detik agar tidak kena rate limit
-                            if time.time() - last_update_time > 10 and log_buffer:
-                                recent_logs = "\n".join(log_buffer[-3:]) # Ambil 3 baris terakhir
+                            # Update ke Telegram (Jeda 5 detik untuk respon awal lebih cepat)
+                            interval = 5 if time.time() - start_time < 30 else 10
+                            if time.time() - last_update_time > interval and log_buffer:
+                                recent = "\n".join(log_buffer[-3:])
                                 try:
-                                    await status_log.edit_text(f"📦 **Live Log:** `{clean_cmd[:30]}...`\n```\n...{recent_logs}\n```")
+                                    await status_log.edit_text(f"📦 **Live Log:** `{clean_cmd[:30]}...`\n```\n...{recent}\n```")
                                 except: pass
                                 last_update_time = time.time()
                                 log_buffer.clear()
@@ -548,17 +550,24 @@ class Orchestrator:
         # 3. Health Check & Integrity (Hotfix 2.26 - Granular Recovery)
         integrity_status = await self._verify_project_integrity(current_root, update)
         if integrity_status != "READY":
-            print(f"[RECOVERY] Memperbaiki integritas proyek ({integrity_status})...")
-            
-            if integrity_status == "EMPTY":
-                msg = "🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite..."
-                recovery_instr = "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```"
+            if not os.path.exists(os.path.join(current_root, "package.json")):
+                print("[RECOVERY] Memperbaiki integritas proyek (EMPTY)...")
+                await update.message.reply_text("🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite...")
+                
+                # [HOTFIX 6.0] Passthrough 'y' untuk menjawab prompt konfirmasi 'Remove existing files?' secara otomatis
+                recovery_instr = "cmd /c \"echo y | npm create vite@latest . -- --template react-ts\""
+                
+                recovery_milestone = {
+                    "id": 0,
+                    "name": "Emergency Project Recovery",
+                    "instruction": recovery_instr,
+                    "required_agent": "terminal_bot"
+                }
+                milestones.insert(0, recovery_milestone)
             else: # MISSING_DEPS
                 msg = "🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang..."
                 recovery_instr = "```bash\nnpm install\n```"
                 
-            await update.message.reply_text(msg)
-            
             recovery_milestone = {
                 "id": 0,
                 "name": "Emergency Project Recovery",
