@@ -370,6 +370,33 @@
                     ]
                 }
             ]
+        },
+        {
+            "title": "Vite React TypeScript Template Initialization",
+            "category": "best_practice",
+            "summary": "Using 'create-vite' with the React TypeScript template provides a quick and efficient way to scaffold a new React project.",
+            "distillation": "When starting a new React TypeScript project, use 'npx -y create-vite@latest ./ --template react-ts --no-interactive && npm install' to quickly set up the project with Vite and install the necessary dependencies, streamlining the initial setup process.",
+            "keywords": [
+                "Vite",
+                "React",
+                "TypeScript",
+                "create-vite",
+                "project setup"
+            ]
+        },
+        {
+            "KnowledgeItem": {
+                "title": "Agent Inaction Due to No Valid Commands",
+                "category": "error_resolution",
+                "summary": "The agent skipped execution because no valid commands were available given the current state.",
+                "distillation": "When the agent reports 'No valid commands', review the planning and ensure that the generated plan contains actions that are executable within the agent's available tools and current environment.",
+                "keywords": [
+                    "no valid commands",
+                    "agent inaction",
+                    "planning failure",
+                    "command validation"
+                ]
+            }
         }
     ]
 }

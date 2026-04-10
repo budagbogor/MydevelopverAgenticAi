@@ -168,9 +168,12 @@ class Orchestrator:
                 if line_clean.startswith('#') or any(line_clean.lower().startswith(f) for f in ["buat", "isi file"]):
                     continue
 
-                # Modifikasi agar non-interaktif
-                cmd = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
-                             r'\1\2 -y ', line_clean)
+                # Modifikasi agar non-interaktif (Idempotent: hanya tambah jika belum ada)
+                if not re.search(r'\s-(?:y|-yes)', line_clean):
+                    cmd = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
+                                 r'\1\2 -y ', line_clean)
+                else:
+                    cmd = line_clean
                 
                 # Cleanup language labels (e.g. "bash npm install")
                 for lang in ['shell ', 'bash ', 'powershell ', 'cmd ']:
@@ -206,6 +209,7 @@ class Orchestrator:
                         return True # Skip execution to avoid WinError 2
 
                 try:
+                    stdout, stderr = None, None # [HOTFIX 2.35] Prevent UnboundLocalError
                     process = await asyncio.create_subprocess_shell(
                         clean_cmd,
                         cwd=active_root,
@@ -490,7 +494,7 @@ class Orchestrator:
             
             if integrity_status == "EMPTY":
                 msg = "🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite..."
-                recovery_instr = "```bash\nnpm create vite@latest . -y -- --template react-ts\nnpm install\n```"
+                recovery_instr = "```bash\nnpm create vite@latest . -- --template react-ts\nnpm install\n```"
             else: # MISSING_DEPS
                 msg = "🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang..."
                 recovery_instr = "```bash\nnpm install\n```"
@@ -660,7 +664,7 @@ class Orchestrator:
                     if process.returncode == 0:
                         await update.message.reply_text(f"✅ **Auto-Init Berhasil!**")
                         self.sona.record_step(agent_id, "SUCCESS", f"Auto-init: {auto_cmd}", status="SUCCESS")
-                        return
+                        return True # [HOTFIX 2.35] Melanjutkan misi ke node berikutnya
                 except: pass
             
             await update.message.reply_text("⚠️ **Terminal Skip:** Melanjutkan ke tahap berikutnya...")
