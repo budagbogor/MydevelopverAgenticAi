@@ -69,7 +69,7 @@ class Orchestrator:
             print(f"[TERMINAL] No executable commands found. Skipping.")
             return False # Return False to trigger fallbacks/failures, not True!
 
-        for block in raw_blocks:
+        for block in cmds:
             lines = block.strip().split('\n')
             
             in_cat_block = False
@@ -766,6 +766,7 @@ class Orchestrator:
                 except: pass
             
             await update.message.reply_text("⚠️ **Terminal Skip:** Melanjutkan ke tahap berikutnya...")
+            return False
         else:
             self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.", status="SUCCESS")
             return True # [HOTFIX 8.0] CRITICAL MISSING RETURN FIX
