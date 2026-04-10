@@ -178,8 +178,9 @@ class Orchestrator:
                         continue
 
                 # Modifikasi agar non-interaktif (Idempotent: hanya tambah jika belum ada)
+                # [HOTFIX 10.0] Nuclear Prompt Buster: More inclusive regex
                 if not re.search(r'\s-(?:y|-yes)', line_clean):
-                    cmd = re.sub(r'(npx |npm create |npm exec )(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
+                    cmd = re.sub(r'(\bnpx \b|\bnpm create \b|\bnpm exec \b)(create-vite(@latest)?|vite|react-native(@latest)?(\s+init)?)', 
                                  r'\1\2 -y ', line_clean)
                 else:
                     cmd = line_clean
@@ -216,12 +217,18 @@ class Orchestrator:
                         return True # Skip execution to avoid WinError 2
 
                 try:
-                    stdout, stderr = None, None # [HOTFIX 3.0] Always initialize
+                    # [HOTFIX 10.0] Nuclear Env: Force CI mode to skip all prompts
+                    custom_env = os.environ.copy()
+                    custom_env["CI"] = "true"
+                    custom_env["npm_config_yes"] = "true"
+                    custom_env["PIP_NO_INPUT"] = "1"
+                    
                     process = await asyncio.create_subprocess_shell(
                         clean_cmd,
                         cwd=active_root,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
+                        env=custom_env
                     )
                     
                     # [HOTFIX 5.0] LIVE LOG STREAMING
@@ -279,8 +286,12 @@ class Orchestrator:
                             return True # Anggap sukses jika returncode 0 di periksa Auditor di loop pemanggil
                             
                     except asyncio.TimeoutError:
-                        process.terminate()
-                        await status_log.edit_text(f"⏰ **Velocity Timeout:** Perintah ini dihentikan karena terlalu lama.")
+                        # [HOTFIX 10.0] Nuclear Terminate for Windows
+                        if os.name == 'nt':
+                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+                        else:
+                            process.terminate()
+                        await status_log.edit_text(f"⏰ **Velocity Timeout:** Perintah dihentikan paksa (Nuclear Kill) karena macet lebih dari 10 menit.")
                         return False
                     except Exception as e:
                         print(f"[ERROR] Stream Error: {e}")
