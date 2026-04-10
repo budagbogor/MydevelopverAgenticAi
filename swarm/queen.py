@@ -45,13 +45,13 @@ class QueenCoordinator:
         INSTRUKSI PENGGUNA: "{user_task}"
         
         WAJIB: Setiap Masterplan HARUS mencakup tahapan berikut (dalam urutan logis):
-        1. "terminal_bot": Inisialisasi Proyek (Web: Vite; Mobile: `npx react-native@latest init` atau `flutter create .`).
-        2. "terminal_bot": Clean Slate (Hapus file default: `rm -rf src/*` di Web atau bersihkan boilerplate di Mobile).
+        1. "terminal_bot": Inisialisasi Proyek (WAJIB menggunakan `./` agar file berada di root: `npm create vite@latest . -- --template react-ts`). JANGAN gunakan perintah yang membuat subfolder baru seperti `create-react-app my-app`.
+        2. "terminal_bot": Clean Slate (Hapus file default: `rm -rf src/*`).
         3. "devops_quality": Arsitektur Folder (PRO-MAX Standard: `src/components`, `src/hooks`, `src/services`, `src/types`, `src/theme`).
-        4. "ux_ui_designer": Design System (Gunakan Standar PREMIUM: Material 3, Tamagui, atau shadcn/ui).
-        5. "coder_internal": Implementasi Kode Utama (Gunakan Standar PRO-MAX dari neural knowledge).
+        4. "ux_ui_designer": Design System (Gunakan Standar PREMIUM: shadcn/ui atau Tailwind CSS).
+        5. "coder_internal": Implementasi Kode Utama (Gunakan Standar PRO-MAX).
         6. "terminal_bot": Quality Check & Build.
-        7. "terminal_bot": Start Server / Emulator.
+        7. "terminal_bot": Start Server.
         8. "browser_bot" atau "vision_bot": Visual Verification.
 
         PENTING: Jika "required_agent" adalah "terminal_bot", properti "instruction" di bawah ini HANYA boleh berisi blok kode triple backticks dengan perintah shell. DILARANG KERAS menambahkan narasi atau penjelasan manusia di luar blok kode tersebut dalam field "instruction".

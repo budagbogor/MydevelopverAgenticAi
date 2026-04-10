@@ -242,24 +242,38 @@ class Orchestrator:
                         print(f"[ERROR] Execution Error: {e}")
                         await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)[:100]}`")
                 
-                    # [HOTFIX 2.25] Neural Terminal Auditor 2.0 (OpenHands-style)
+                    # [HOTFIX 2.40] Robust Terminal Auditor: Hanya gagal jika returncode != 0
                     if stdout or stderr:
                         out_text = (stdout.decode() if stdout else "") + (stderr.decode() if stderr else "")
                         critical_errors = ["npm ERR!", "FATAL ERROR", "Module not found", "Command not found", "failed to compile"]
                         
                         if any(err in out_text for err in critical_errors):
-                            print(f"[CRITICAL AUDIT] Terdeteksi kegagalan log: {out_text[:100]}")
-                            await update.message.reply_text(f"🚨 **Critical Audit:** Perintah sepertinya gagal meskipun terminal selesai.\n`{out_text[:150]}`")
-                            
-                            # Memicu Troubleshooting Mode (GPT-Pilot-style)
-                            if "node_modules" in out_text.lower() or "not found" in out_text.lower():
-                                milestones.insert(i + 1, {"name": "Troubleshooting: Fix Dependencies", "instruction": "```bash\nnpm install\n```", "required_agent": "terminal_bot"})
-                            elif "EADDRINUSE" in out_text:
-                                milestones.insert(i + 1, {"name": "Troubleshooting: Clear Port", "instruction": "```bash\nnpx kill-port 5173\n```", "required_agent": "terminal_bot"})
-                            return False # Tandai sebagai gagal agar tidak lanjut asal-asalan
+                            print(f"[CRITICAL AUDIT] Terdeteksi potensi masalah log: {out_text[:100]}")
+                            if process.returncode != 0:
+                                await update.message.reply_text(f"🚨 **Critical Audit:** Perintah gagal.\n`{out_text[:150]}`")
+                                # Memicu Troubleshooting Mode (GPT-Pilot-style)
+                                if "node_modules" in out_text.lower() or "not found" in out_text.lower():
+                                    milestones.insert(i + 1, {"name": "Troubleshooting: Fix Dependencies", "instruction": "```bash\nnpm install\n```", "required_agent": "terminal_bot"})
+                                return False 
+                            else:
+                                await update.message.reply_text(f"⚠️ **Audit Warning:** Terdeteksi teks mencurigakan, namun perintah selesai dengan sukses. Melanjutkan...")
                             
                     if process.returncode != 0:
                         return False
+
+                    # [HOTFIX 2.40] Auto-Flatten: Cegah isolasi subfolder jika 'create' tidak sengaja membuat folder baru
+                    # Jika ada folder baru yang berisi package.json, pindahkan isinya ke root.
+                    if any(kw in clean_cmd.lower() for kw in ["create", "init"]):
+                        for item in os.listdir(active_root):
+                            item_path = os.path.join(active_root, item)
+                            if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "package.json")):
+                                if item not in ["node_modules", "src"]: # Bukan folder standar
+                                    print(f"[AUTO-FLATTEN] Mendeteksi subfolder proyek: {item}. Meratakan ke root...")
+                                    for sub_item in os.listdir(item_path):
+                                        shutil.move(os.path.join(item_path, sub_item), os.path.join(active_root, sub_item))
+                                    try: os.rmdir(item_path)
+                                    except: pass
+                                    break
 
                 except Exception as e:
                     print(f"[ERROR] Critical Shell Error: {e}")
