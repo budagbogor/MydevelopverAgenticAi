@@ -166,18 +166,22 @@ class TelegramBot:
         current_path = os.getenv("PROJECT_ROOT", "")
         current_project = os.path.basename(current_path)
         
-        if any(kw in text for kw in new_project_keywords):
-            # Coba ambil calon nama proyek dari teks
+        if ("lanjutkan" not in text and "continue" not in text) or (any(kw in text for kw in new_project_keywords)):
+            # Tentukan nama folder: Gunakan input user atau timestamp sebagai fallback
             potential_name = ""
             for kw in new_project_keywords:
                 if kw in text:
                     potential_name = text.split(kw, 1)[-1].split("\n")[0].strip()
                     break
             
-            folder_name = "".join([c if c.isalnum() else "-" for c in potential_name[:30]]).lower().strip("-")
+            if not potential_name: # Jika bicara umum saja, buat folder dg timestamp
+                from datetime import datetime
+                folder_name = f"project-{datetime.now().strftime('%m%d-%H%M')}"
+            else:
+                folder_name = "".join([c if c.isalnum() else "-" for c in potential_name[:30]]).lower().strip("-")
             
             if folder_name and folder_name != current_project:
-                await update.message.reply_text(f"🎨 **Intent Proyek Baru Terdeteksi:** `{folder_name}`", parse_mode='Markdown')
+                await update.message.reply_text(f"📁 **Disiplin Proyek Baru:** Menciptakan lingkungan `{folder_name}`...", parse_mode='Markdown')
                 context.args = [folder_name]
                 return await self.handle_new_project(update, context)
         

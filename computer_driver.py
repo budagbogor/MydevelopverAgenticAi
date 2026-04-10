@@ -4,6 +4,7 @@ import os
 import subprocess
 import pygetwindow as gw
 import uiautomation as auto
+import re
 from config import IDE_PATH, TARGET_IDE
 
 class ComputerDriver:
@@ -70,7 +71,10 @@ class ComputerDriver:
                 except:
                     pass
                 
-                target_win.SetActive()
+                # [HOTFIX 3.0] Restore window if needed
+                try: target_win.SetActive()
+                except: pass
+                
                 target_win.SetFocus()
                 time.sleep(1.0)
                 return True

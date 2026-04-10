@@ -261,6 +261,19 @@
                 "debugging",
                 "undefined variable"
             ]
+        },
+        {
+            "title": "Simulating and Resolving Linting Errors in React",
+            "category": "error_resolution",
+            "summary": "Demonstrates creating a React component with an undefined variable to trigger a linting error, followed by the process of identifying and resolving the error.",
+            "distillation": "To intentionally create a linting error in a React component, introduce an undefined variable; resolve it by either defining the variable or removing its usage. This validates linting tools.",
+            "keywords": [
+                "React",
+                "linting error",
+                "undefined variable",
+                "error resolution",
+                "debugging"
+            ]
         }
     ],
     "best_practices": [

@@ -184,12 +184,10 @@ class Orchestrator:
                 clean_cmd = re.sub(r'cd\s+[^\n&|;]+[&|;]*', '', cmd).strip()
                 if not clean_cmd: continue # Abaikan jika hanya berisi perintah cd
                 
-                # [VELOCITY] Adaptive Timeout based on command type
-                timeout_val = 300 # Default (install/build)
+                # [VELOCITY] Adaptive Timeout based on command type (Hotfix 3.0: 600s for installs)
+                timeout_val = 600 if any(kw in clean_cmd.lower() for kw in ["install", "build", "create", "init"]) else 300
                 if any(x in clean_cmd.lower() for x in ["mkdir", "git", "touch", "ls", "dir", "cat"]):
                     timeout_val = 30
-                elif "npx init" in clean_cmd.lower():
-                    timeout_val = 120
 
                 print(f"[TERMINAL] Target: {active_root} | Executing: {clean_cmd}")
                 
@@ -209,7 +207,7 @@ class Orchestrator:
                         return True # Skip execution to avoid WinError 2
 
                 try:
-                    stdout, stderr = None, None # [HOTFIX 2.35] Prevent UnboundLocalError
+                    stdout, stderr = None, None # [HOTFIX 3.0] Always initialize
                     process = await asyncio.create_subprocess_shell(
                         clean_cmd,
                         cwd=active_root,
@@ -299,7 +297,17 @@ class Orchestrator:
         
         if not has_scaffold:
             print(f"[INTEGRITY] Cleaning messy directory for fresh scaffold: {path}")
-            for item in found_files:
+            # [HOTFIX 3.0] NUCLEAR CLEANUP: Power-Force deletion for Windows
+            try:
+                # 1. Matikan node/npm yang mungkin mengunci file
+                subprocess.run(["taskkill", "/F", "/IM", "node.exe", "/T"], capture_output=True)
+                time.sleep(1.0)
+                # 2. Hapus secara rekursif via PowerShell (lebih tangguh dari shutil)
+                subprocess.run(["powershell", "-Command", f'Remove-Item -Path "{path}\\*" -Recurse -Force -ErrorAction SilentlyContinue'], capture_output=True)
+                time.sleep(1.5)
+            except: pass
+
+            for item in os.listdir(path):
                 item_path = os.path.join(path, item)
                 try:
                     if os.path.isdir(item_path): shutil.rmtree(item_path)
