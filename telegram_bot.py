@@ -107,10 +107,10 @@ class TelegramBot:
                 
                 # Paksa tutup dan buka kembali IDE dengan path baru
                 self.orchestrator.driver.close_ide()
-                await asyncio.sleep(3)  # Tunggu Trae benar-benar mati
+                time.sleep(2.0) # Tunggu Trae benar-benar mati
                 self.orchestrator.driver.ensure_focus()  # Buka Trae baru tanpa force_restart
-                # Tunggu Trae benar-benar terbuka dan siap (15 detik untuk folder baru)
-                await asyncio.sleep(10)
+                # [STABILITY] Berikan waktu lebih lama (25 detik) agar IDE memuat proyek baru sepenuhnya sebelum pengerjaan dimulai
+                await asyncio.sleep(25)
             else:
                 await update.message.reply_text("❌ Gagal update .env")
         except Exception as e:
@@ -166,8 +166,10 @@ class TelegramBot:
         current_path = os.getenv("PROJECT_ROOT", "")
         current_project = os.path.basename(current_path)
         
-        if ("lanjutkan" not in text and "continue" not in text) or (any(kw in text for kw in new_project_keywords)):
-            # Tentukan nama folder: Gunakan input user atau timestamp sebagai fallback
+        # Only trigger new project IF keywords are present, or if NO project is currently active
+        is_new_intent = any(kw in text for kw in new_project_keywords)
+        
+        if is_new_intent:
             potential_name = ""
             for kw in new_project_keywords:
                 if kw in text:

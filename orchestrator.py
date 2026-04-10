@@ -663,6 +663,34 @@ class Orchestrator:
         
         return False
 
+    async def _execute_visual_stage(self, ms, update):
+        """Spesifik untuk agen Coder Trae: Visual Interaction via RPA."""
+        instruction = ms.get('instruction', '')
+        file_target = ms.get('file_target', '') # Optional
+        
+        # [HOTFIX 4.0] Micro-Status: Heartbeat
+        status_msg = await update.message.reply_text("🖥️ **Visual Mode:** Menyiapkan interaksi dengan Trae...")
+        
+        try:
+            if file_target:
+                await status_msg.edit_text(f"🔍 **Visual Mode:** Membuka file `{file_target}`...")
+                await asyncio.to_thread(self.driver.open_in_trae, file_target)
+                await asyncio.sleep(1.0)
+
+            await status_msg.edit_text("⌨️ **Visual Mode:** Mengirim instruksi ke AI Builder (Ctrl+U)...")
+            # [HOTFIX 4.0] Threading: Jangan memblokir event loop bot saat mengetik lama
+            success = await asyncio.to_thread(self.driver.type_in_trae, instruction)
+            
+            if success:
+                await status_msg.edit_text("✅ **Visual Mode:** Instruksi berhasil dikirim dan dieksekusi.")
+            else:
+                await status_msg.edit_text("❌ **Visual Mode Gagal:** Tidak dapat menemukan jendela Trae.")
+            
+            return success
+        except Exception as e:
+            await status_msg.edit_text(f"⚠️ **Visual Mode Error:** {str(e)}")
+            return False
+
     async def _execute_terminal_stage(self, ms, i, milestones, update):
         """Spesifik untuk agen Terminal: Command Line execution."""
         ms_instruction = ms.get('instruction', '')

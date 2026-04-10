@@ -93,8 +93,9 @@ class ComputerDriver:
             
             return False
         except Exception as e:
-            print(f"[EYES] Gagal fokus ke {target}: {e}")
-            return False
+            msg = f"[EYES] EROR FOKUS KRITIS ({target}): {e}"
+            print(msg)
+            raise Exception(msg)
 
     def capture_screen(self, filename="current_state.png"):
         """Mengambil screenshot layar untuk verifikasi visual (Reflect)."""
@@ -178,8 +179,12 @@ class ComputerDriver:
         print(f"[VISUAL] Mengirim instruksi ke Trae Builder: {instruction[:50]}...")
         if self.ensure_focus():
             # 1. Buka AI Builder (Ctrl+U sesuai permintaan user)
+            # [HOTFIX 3.1] Force-focus click and extended wait
+            try: pyautogui.click()
+            except: pass
+            time.sleep(0.5)
             pyautogui.hotkey('ctrl', 'u')
-            time.sleep(2.0) # Tunggu panel muncul
+            time.sleep(4.0) # Tunggu panel muncul
             
             # 2. Ketik instruksi
             pyautogui.write(instruction, interval=0.01)
@@ -189,7 +194,8 @@ class ComputerDriver:
             pyautogui.press('enter')
             print("[VISUAL] Instruksi terkirim ke Trae.")
             return True
-        return False
+        else:
+            raise Exception(f"Gagal memicu AI Builder: Jendela {TARGET_IDE} tidak merespons.")
 
     def open_in_trae(self, file_path):
         """Membuka file tertentu di Trae agar pengguna bisa melihat hasilnya di layar."""
