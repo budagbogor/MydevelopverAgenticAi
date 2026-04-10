@@ -53,15 +53,21 @@ class Orchestrator:
             
         print(f"[TERMINAL] Base Dir: {active_root}")
         
-        # Ekstrak blok kode triple backticks
-        raw_blocks = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
-        if not raw_blocks:
-            # Fallback ke backticks tunggal
-            raw_blocks = re.findall(r'`([^`\n]+)`', instruction)
+        # [HOTFIX 8.0] Universal Parser: Try to find commands in backticks first, 
+        # but if none exist, treat the ENTIRE instruction as a single command.
+        cmds = re.findall(r'```(?:\w+)?\n?(.*?)```', instruction, re.DOTALL)
+        if not cmds:
+            cmds = re.findall(r'`([^`\n]+)`', instruction)
         
-        if not raw_blocks:
+        # If still no blocks found, use the whole instruction (cleaning comments)
+        if not cmds:
+            raw_clean = "\n".join([line for line in instruction.split("\n") if not line.strip().startswith("#")])
+            if raw_clean.strip():
+                cmds = [raw_clean.strip()]
+        
+        if not cmds:
             print(f"[TERMINAL] No executable commands found. Skipping.")
-            return True
+            return False # Return False to trigger fallbacks/failures, not True!
 
         for block in raw_blocks:
             lines = block.strip().split('\n')
@@ -577,6 +583,7 @@ class Orchestrator:
         self.variable_pool["project_root"] = current_root
 
         # 3. Execution Phase (Node-Based Workflow)
+        mission_success = True # [HOTFIX 8.0] Proper Initialization
         for i, ms in enumerate(milestones):
             ms_name = ms.get('name', 'Terminal Task')
             ms_instruction = ms.get('instruction', '')
@@ -759,9 +766,9 @@ class Orchestrator:
                 except: pass
             
             await update.message.reply_text("⚠️ **Terminal Skip:** Melanjutkan ke tahap berikutnya...")
-            self.sona.record_step(agent_id, "SKIPPED", "No valid commands.", status="SKIPPED")
         else:
             self.sona.record_step(agent_id, "SUCCESS", "Terminal commands executed.", status="SUCCESS")
+            return True # [HOTFIX 8.0] CRITICAL MISSING RETURN FIX
 
     async def _execute_browser_stage(self, ms, update):
         """Spesifik untuk agen Browser Bot: Visual Preview."""
@@ -770,6 +777,7 @@ class Orchestrator:
             self.sona.record_step("browser_bot", "WARNING", "Browser preview failed.", status="FAILED")
         else:
             self.sona.record_step("browser_bot", "SUCCESS", "Browser preview captured.", status="SUCCESS")
+        return success # [HOTFIX 8.0] Fixed return
 
     async def _final_distillation(self, update, mission_success=True):
         """Neural Distillation (Knowledge Bank) + Milestone Final Report."""

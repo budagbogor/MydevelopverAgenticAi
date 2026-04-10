@@ -299,6 +299,19 @@
                 "code quality",
                 "undefined variable"
             ]
+        },
+        {
+            "title": "Unspecified Failure Despite Successful Terminal Execution",
+            "category": "error_resolution",
+            "summary": "The agent reports successful execution of terminal commands, yet the overall project failed, indicating a disconnect between terminal actions and achieving the desired outcome (creating a modern shoe store website).",
+            "distillation": "Future projects should include more robust validation steps *after* terminal commands are executed to confirm that they are contributing to the high-level goals, not just running without effect, and the validation must connect the terminal output to tangible progress toward the objective.",
+            "keywords": [
+                "terminal execution",
+                "failure analysis",
+                "validation",
+                "goal alignment",
+                "post-execution check"
+            ]
         }
     ],
     "best_practices": [
