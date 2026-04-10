@@ -163,10 +163,13 @@ class Orchestrator:
                                 print(f"[WARN] {op_prefix.upper().strip()} Error: {e}")
                         continue
 
-                # [DEFAULT] EKSEKUSI SHELL
-                # Saring komentar & instruksi narasi
-                if line_clean.startswith('#') or any(line_clean.lower().startswith(f) for f in ["buat", "isi file"]):
-                    continue
+                # [HOTFIX 7.0] Smart Parser: Don't skip commands like 'cmd /c' or 'echo'
+                # Only skip genuine comments or narration starters
+                narrative_starters = ["buat", "isi file", "tambahkan", "ringkasan"]
+                if line_clean.startswith('#') or any(line_clean.lower().startswith(f) for f in narrative_starters):
+                    # But if it's 'cmd /c', it's NOT narrative even if it contains keywords
+                    if not line_clean.lower().startswith("cmd /c"):
+                        continue
 
                 # Modifikasi agar non-interaktif (Idempotent: hanya tambah jika belum ada)
                 if not re.search(r'\s-(?:y|-yes)', line_clean):
@@ -547,27 +550,19 @@ class Orchestrator:
         current_root = os.getenv("PROJECT_ROOT", os.getcwd())
         self.initial_snapshot = self._get_recursive_snapshot(current_root)
         
-        # 3. Health Check & Integrity (Hotfix 2.26 - Granular Recovery)
+        # 3. Health Check & Integrity (Hotfix 7.0 - Consolidated Recovery)
         integrity_status = await self._verify_project_integrity(current_root, update)
         if integrity_status != "READY":
-            if not os.path.exists(os.path.join(current_root, "package.json")):
-                print("[RECOVERY] Memperbaiki integritas proyek (EMPTY)...")
-                await update.message.reply_text("🚨 **Integrity Alert:** Folder proyek kosong atau tidak valid. Melakukan inisialisasi scaffold Vite...")
-                
-                # [HOTFIX 6.0] Passthrough 'y' untuk menjawab prompt konfirmasi 'Remove existing files?' secara otomatis
+            print(f"[RECOVERY] Memperbaiki integritas proyek ({integrity_status})...")
+            
+            if integrity_status == "EMPTY":
+                await update.message.reply_text("🚨 **Integrity Alert:** Folder proyek kosong. Melakukan inisialisasi scaffold Vite...")
                 recovery_instr = "cmd /c \"echo y | npm create vite@latest . -- --template react-ts\""
-                
-                recovery_milestone = {
-                    "id": 0,
-                    "name": "Emergency Project Recovery",
-                    "instruction": recovery_instr,
-                    "required_agent": "terminal_bot"
-                }
-                milestones.insert(0, recovery_milestone)
             else: # MISSING_DEPS
-                msg = "🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang..."
-                recovery_instr = "```bash\nnpm install\n```"
-                
+                await update.message.reply_text("🚨 **Integrity Alert:** Dependensi (`node_modules`) hilang. Menjalankan instalasi ulang...")
+                recovery_instr = "npm install"
+            
+            # Insert recovery as the first milestone
             recovery_milestone = {
                 "id": 0,
                 "name": "Emergency Project Recovery",
@@ -638,10 +633,11 @@ class Orchestrator:
             
             if not success:
                 print(f"[WORKFLOW] Stopping at {ms_name} due to failure.")
+                mission_success = False
                 break
 
         # 4. Neural Distillation (Knowledge Bank)
-        await self._final_distillation(update)
+        await self._final_distillation(update, mission_success)
     
     async def _execute_internal_coder_stage(self, ms, i, milestones, update):
         """Implementasi PRO-MAX: Koding Otonom dengan AutoGPT-style Reflexion."""
@@ -775,10 +771,10 @@ class Orchestrator:
         else:
             self.sona.record_step("browser_bot", "SUCCESS", "Browser preview captured.", status="SUCCESS")
 
-    async def _final_distillation(self, update):
+    async def _final_distillation(self, update, mission_success=True):
         """Neural Distillation (Knowledge Bank) + Milestone Final Report."""
-        # Tentukan status akhir
-        verdict = "SUCCESS" if all(step.get('status') == "SUCCESS" for step in self.sona.current_trajectory) else "FAILED"
+        # Tentukan status akhir berdasarkan realita loop misi
+        verdict = "SUCCESS" if mission_success else "FAILED"
         path = self.sona.end_trajectory(verdict, "Project sequence completed.")
         
         with open(path, 'r') as f:
