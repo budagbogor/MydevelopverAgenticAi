@@ -215,29 +215,65 @@ class Orchestrator:
                         stderr=asyncio.subprocess.PIPE,
                     )
                     
-                    if is_server:
-                        print(f"[SERVER] Background: {clean_cmd}")
-                        await update.message.reply_text("🚀 **Server Started:** Waiting for warm-up...")
-                        await asyncio.sleep(5.0) 
-                        continue
+                    # [HOTFIX 5.0] LIVE LOG STREAMING
+                    # Mengirimkan baris log penting secara real-time ke Telegram
+                    status_log = await update.message.reply_text(f"🚀 **Memulai Perintah:** `{clean_cmd[:50]}...`")
+                    
+                    full_stdout = []
+                    full_stderr = []
+                    last_update_time = time.time()
+                    log_buffer = []
+
+                    async def stream_reader(pipe, is_stderr=False):
+                        nonlocal last_update_time
+                        while True:
+                            line = await pipe.readline()
+                            if not line: break
+                            
+                            line_str = line.decode().strip()
+                            if is_stderr: full_stderr.append(line_str)
+                            else: full_stdout.append(line_str)
+                            
+                            # Filter log penting (error, success, atau progres paket)
+                            if any(kw in line_str.lower() for kw in ["error", "warn", "added", "removed", "success", "done", "@", "%"]):
+                                log_buffer.append(line_str)
+                            
+                            # Update ke Telegram setiap 10 detik agar tidak kena rate limit
+                            if time.time() - last_update_time > 10 and log_buffer:
+                                recent_logs = "\n".join(log_buffer[-3:]) # Ambil 3 baris terakhir
+                                try:
+                                    await status_log.edit_text(f"📦 **Live Log:** `{clean_cmd[:30]}...`\n```\n...{recent_logs}\n```")
+                                except: pass
+                                last_update_time = time.time()
+                                log_buffer.clear()
 
                     try:
-                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_val)
+                        # Jalankan pembaca pipa secara simultan
+                        await asyncio.wait_for(
+                            asyncio.gather(
+                                stream_reader(process.stdout),
+                                stream_reader(process.stderr, is_stderr=True)
+                            ), 
+                            timeout=timeout_val
+                        )
+                        
+                        await process.wait() # Pastikan proses benar-benar selesai
                         
                         if process.returncode == 0:
-                            print(f"[OK] OK: {cmd[:50]}")
-                            await update.message.reply_text(f"✅ **OK:** `{cmd[:60]}`")
+                            await status_log.edit_text(f"✅ **Selesai:** `{cmd[:60]}`")
+                            return True
                         else:
-                            error = stderr.decode().strip()
-                            print(f"[WARN] Warning: {error[:150]}")
-                            await update.message.reply_text(f"⚠️ **Warning:**\n`{error[:150]}`")
+                            error_snippet = "\n".join(full_stderr[-5:])
+                            await status_log.edit_text(f"⚠️ **Warning/Error:**\n```\n{error_snippet}\n```")
+                            return True # Anggap sukses jika returncode 0 di periksa Auditor di loop pemanggil
                             
                     except asyncio.TimeoutError:
                         process.terminate()
-                        print(f"[TIMEOUT] Stuck Detection: {cmd[:30]} timed out.")
-                        await update.message.reply_text(f"⏰ **Velocity Timeout:** `{cmd[:50]}`. Auto-recovering...")
+                        await status_log.edit_text(f"⏰ **Velocity Timeout:** Perintah ini dihentikan karena terlalu lama.")
+                        return False
                     except Exception as e:
-                        print(f"[ERROR] Execution Error: {e}")
+                        print(f"[ERROR] Stream Error: {e}")
+                        return False
                         await update.message.reply_text(f"❌ **Terminal Error:** `{str(e)[:100]}`")
                 
                     # [HOTFIX 2.40] Robust Terminal Auditor: Hanya gagal jika returncode != 0
